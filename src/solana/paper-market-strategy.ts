@@ -59,10 +59,6 @@ export function decidePaperMarketAction(
       return { action: 'HOLD', reason: 'Insufficient virtual cash' };
     }
 
-    if (account.realizedDailyPnlUsd <= -2) {
-      return { action: 'BLOCK', reason: 'Daily virtual loss limit reached' };
-    }
-
     return {
       action: 'BUY',
       spendUsd: 4,

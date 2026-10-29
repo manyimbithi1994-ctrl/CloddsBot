@@ -3,6 +3,12 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { PaperTradingEngine } from './paper-engine';
+import {
+  createPaperTestConfig,
+  createPaperTestRiskPolicy,
+  type PaperTestConfig
+} from './paper-test-config';
+import { openPaperTestSession } from './paper-test-session';
 import { validateSafePaperMarket } from './paper-market-safety';
 import { executePaperMarketDecision } from './paper-market-executor';
 import { acquirePaperLock } from './paper-lock';
@@ -18,7 +24,8 @@ import {
 export function processPaperMarketObservation(
   checkpoint: PaperMarketCheckpoint,
   directory: string,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  config: PaperTestConfig = createPaperTestConfig()
 ) {
   mkdirSync(directory, { recursive: true });
 
@@ -28,6 +35,8 @@ export function processPaperMarketObservation(
     const validated = validateMarketCheckpoint(checkpoint);
     const journalPath = join(directory, 'market-journal.jsonl');
     const journal = readMarketJournal(journalPath);
+    const session = openPaperTestSession(directory, config);
+    const policy = createPaperTestRiskPolicy(session.config);
     const previous = journal.at(-1);
 
     const observation = validated.observation;
@@ -45,7 +54,7 @@ export function processPaperMarketObservation(
     if (journal.some(e => e.observationId === observationId)) {
       return {
         action: 'DUPLICATE' as const,
-        account: previous?.account ?? new PaperTradingEngine().snapshot()
+        account: previous?.account ?? new PaperTradingEngine(policy).snapshot()
       };
     }
 
@@ -85,7 +94,7 @@ export function processPaperMarketObservation(
       }
     }
 
-    const engine = new PaperTradingEngine();
+    const engine = new PaperTradingEngine(policy);
 
     if (previous) {
       engine.restore(previous.account);
