@@ -73,7 +73,14 @@ export class PaperTradingEngine {
   }
 
   sell(quantity: number, priceUsd: number, slippageBps = 100) {
-    if (this.positions !== 1 || slippageBps > this.policy.maxSlippageBps) throw new Error('Paper exit blocked');
+    if (
+      this.positions !== 1 ||
+      !Number.isFinite(slippageBps) ||
+      slippageBps < 0 ||
+      slippageBps > this.policy.maxSlippageBps
+    ) {
+      throw new Error('Paper exit blocked');
+    }
     const fill = paperSell(this.account, quantity, priceUsd, slippageBps);
     this.account = fill.account;
     this.realizedDailyPnlUsd += fill.realizedPnlUsd;
