@@ -72,7 +72,7 @@ th { color: #94a3b8; }
 
 <section class="panel" aria-label="Simulation setup">
   <h2>Simulation setup</h2>
-  <p>Configure a virtual account. No wallets, live trading, or automatic market polling.</p>
+  <p>Configure a virtual account. Read-only market observations can drive simulated trades; no wallets or real orders.</p>
   <form id="setup" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
     <label>Starting balance (USD)<br><input id="balance" type="number" min="4" max="1000000" step="0.01" value="20" required></label>
     <label>Solana token mint<br><input id="token" placeholder="Paste Solana mint address" style="min-width:280px"></label>
@@ -85,7 +85,7 @@ th { color: #94a3b8; }
     <button id="stop" type="button">Stop session</button>
     <small id="session-state">Loading session status...</small>
   </div>
-  <p><small>Start marks the session ready; it does not start market polling or execute orders. Existing sessions are preserved.</small></p>
+  <p><small>Select a token, then Start to poll read-only prices every 15 seconds and simulate trades. Stop halts polling. Existing sessions are preserved.</small></p>
 </section>
 <section class="grid" id="metrics"></section>
 
