@@ -85,3 +85,6 @@ CLAWDBOT_ARCHITECTURE.md
 # Standalone compute API server (monetization layer — hosted only)
 src/api/
 .vercel
+
+# Local paper trading sessions
+.paper-sessions/

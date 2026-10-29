@@ -93,7 +93,7 @@ const server = createServer((req, res) => {
 
     if (url.pathname === '/') {
       const html = readFileSync(
-        join(import.meta.dirname, 'paper-dashboard', 'index.html'),
+        join(__dirname, 'paper-dashboard', 'index.html'),
         'utf8'
       );
 
