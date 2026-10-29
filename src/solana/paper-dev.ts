@@ -60,6 +60,24 @@ try {
     );
   }
 
+  // Repair a missing or outdated checkpoint using the validated journal.
+  // Never overwrite a checkpoint that is ahead of the journal or
+  // disagrees with the journal at the same tick.
+  if (
+    latest &&
+    (
+      !checkpoint ||
+      checkpoint.nextTickIndex < latest.nextTickIndex
+    )
+  ) {
+    savePaperSession(sessionPath, latest);
+    console.log(JSON.stringify({
+      mode: 'PAPER_ONLY',
+      event: 'CHECKPOINT_REPAIRED',
+      nextTickIndex: latest.nextTickIndex
+    }));
+  }
+
   let nextTickIndex = saved?.nextTickIndex ?? 0;
   let entryPrice: number | null = saved?.entryPrice ?? null;
 
