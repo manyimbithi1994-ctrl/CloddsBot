@@ -70,6 +70,22 @@ th { color: #94a3b8; }
   <small id="status">Loading session...</small>
 </header>
 
+<section class="panel" aria-label="Simulation setup">
+  <h2>Simulation setup</h2>
+  <p>Configure a virtual account. No wallets, live trading, or automatic market polling.</p>
+  <form id="setup" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+    <label>Starting balance (USD)<br><input id="balance" type="number" min="4" max="1000000" step="0.01" value="20" required></label>
+    <label>Token<br><input value="Select token later" disabled></label>
+    <label>Observation interval<br><input value="15 seconds" disabled></label>
+    <button type="submit">Create new session</button>
+  </form>
+  <div style="display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap">
+    <button id="start" type="button">Start session</button>
+    <button id="stop" type="button">Stop session</button>
+    <small id="session-state">Loading session status...</small>
+  </div>
+  <p><small>Start marks the session ready; it does not start market polling or execute orders. Existing sessions are preserved.</small></p>
+</section>
 <section class="grid" id="metrics"></section>
 
 <section class="panel">
@@ -100,6 +116,35 @@ th { color: #94a3b8; }
 </main>
 
 <script>
+const state = document.getElementById('session-state');
+async function sessionRequest(action, payload) {
+  const response = await fetch('/api/session/' + action, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Session request failed');
+  state.textContent = 'Session: ' + result.status + ' · Market polling inactive';
+  await refresh();
+}
+document.getElementById('setup').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    await sessionRequest('create', {
+      startingBalanceUsd: Number(document.getElementById('balance').value),
+      tokenMint: null, observationIntervalSeconds: 15
+    });
+  } catch (error) { state.textContent = 'Error: ' + error.message; }
+});
+for (const action of ['start', 'stop']) {
+  document.getElementById(action).addEventListener('click', async () => {
+    try { await sessionRequest(action, {}); }
+    catch (error) { state.textContent = 'Error: ' + error.message; }
+  });
+}
+fetch('/api/session').then(r => r.json()).then(data => {
+  state.textContent = 'Session: ' + data.status + ' · Market polling inactive';
+}).catch(() => { state.textContent = 'Session status unavailable'; });
 const usd = n => '$' + Number(n).toFixed(2);
 const percent = n => Number(n).toFixed(1) + '%';
 
