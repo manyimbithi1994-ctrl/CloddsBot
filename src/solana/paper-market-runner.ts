@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { PaperTradingEngine } from './paper-engine';
+import { validateMarketObservation } from './paper-market-data';
 import { executePaperMarketDecision } from './paper-market-executor';
 import { acquirePaperLock } from './paper-lock';
 import {
@@ -57,6 +58,17 @@ export function processPaperMarketObservation(
       )
     ) {
       throw new Error('Market observation identity or order mismatch');
+    }
+
+    // Reject unsafe price jumps before any simulated execution.
+    // The checkpoint validator has already checked current liquidity
+    // and trading-pair identity.
+    if (previous) {
+      validateMarketObservation(
+        observation,
+        previous.priceUsd,
+        nowMs
+      );
     }
 
     const engine = new PaperTradingEngine();
