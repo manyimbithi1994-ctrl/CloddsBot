@@ -39,6 +39,17 @@ try {
     );
   }
 
+  if (
+    latest &&
+    checkpoint &&
+    checkpoint.nextTickIndex === latest.nextTickIndex &&
+    JSON.stringify(checkpoint) !== JSON.stringify(latest)
+  ) {
+    throw new Error(
+      'Checkpoint and journal disagree; manual reconciliation required'
+    );
+  }
+
   // A journal is authoritative once it exists.
   const saved = latest ?? checkpoint;
 
