@@ -1,13 +1,17 @@
 import {
   mkdirSync,
   readFileSync,
-  writeFileSync,
-  renameSync,
   existsSync
 } from 'node:fs';
 import { join } from 'node:path';
+
 import { fetchPaperTokenPrice } from './paper-price-feed';
 import { classifyMarketSnapshot } from './paper-market-snapshot';
+import { evaluateMarketFreshness } from './paper-market-freshness';
+import {
+  loadMarketCheckpoint,
+  saveMarketCheckpoint
+} from './paper-market-checkpoint';
 import { validateSafePaperMarket } from './paper-market-safety';
 import type { PaperMarketObservation } from './paper-market-data';
 import { acquirePaperLock } from './paper-lock';
@@ -21,16 +25,28 @@ if (!mint) {
 
 mkdirSync(dir, { recursive: true });
 
-const statePath = join(dir, 'market-state.json');
+const legacyPath = join(dir, 'market-state.json');
+const checkpointPath = join(dir, 'market-checkpoint.json');
+
 async function main(): Promise<void> {
   const release = acquirePaperLock(join(dir, 'monitor.lock'));
 
   try {
-    let previous: PaperMarketObservation | null = null;
+    const checkpoint = loadMarketCheckpoint(checkpointPath);
 
-    if (existsSync(statePath)) {
+    let previous: PaperMarketObservation | null = null;
+    let previousFreshness = checkpoint?.freshness ?? null;
+    let migratedFromLegacy = false;
+
+    if (checkpoint) {
+      if (checkpoint.observation.tokenMint !== mint) {
+        throw new Error('Stored market identity mismatch');
+      }
+
+      previous = checkpoint.observation;
+    } else if (existsSync(legacyPath)) {
       const saved: unknown = JSON.parse(
-        readFileSync(statePath, 'utf8')
+        readFileSync(legacyPath, 'utf8')
       );
 
       if (
@@ -41,11 +57,15 @@ async function main(): Promise<void> {
         throw new Error('Stored market identity mismatch');
       }
 
+      const legacy = saved as PaperMarketObservation;
+
       previous = validateSafePaperMarket(
-        saved as PaperMarketObservation,
+        legacy,
         null,
-        Date.parse((saved as PaperMarketObservation).observedAt)
+        Date.parse(legacy.observedAt)
       );
+
+      migratedFromLegacy = true;
     }
 
     const observation = await fetchPaperTokenPrice(mint!);
@@ -60,20 +80,29 @@ async function main(): Promise<void> {
       previous
     );
 
-    const tempPath = `${statePath}.${process.pid}.tmp`;
+    const nowMs = Date.parse(validated.observedAt);
 
-    writeFileSync(
-      tempPath,
-      JSON.stringify(validated, null, 2),
-      { flag: 'wx', mode: 0o600 }
+    // The legacy format has no freshness history.
+    // Begin the freshness clock at migration time.
+    const freshness = evaluateMarketFreshness(
+      migratedFromLegacy ? 'INITIAL' : snapshotStatus,
+      previousFreshness,
+      nowMs
     );
 
-    renameSync(tempPath, statePath);
+    saveMarketCheckpoint(checkpointPath, {
+      version: 1,
+      observation: validated,
+      freshness: freshness.state
+    });
 
     console.log(JSON.stringify({
       mode: 'OBSERVATION_ONLY',
       event: 'MARKET_OBSERVATION',
       snapshotStatus,
+      freshnessStatus: freshness.status,
+      unchangedForMs: freshness.unchangedForMs,
+      migratedFromLegacy,
       observation: validated
     }, null, 2));
   } finally {
