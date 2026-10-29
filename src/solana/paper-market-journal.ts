@@ -20,6 +20,8 @@ export interface PaperMarketJournalEntry {
   tokenMint: string;
   pairAddress: string;
   priceUsd: number;
+  source?: string;
+  liquidityUsd?: number;
   action: 'BUY' | 'SELL' | 'HOLD' | 'BLOCK';
   entryPriceUsd: number | null;
   account: ReturnType<PaperTradingEngine['snapshot']>;
@@ -69,6 +71,20 @@ export function validateMarketJournalEntry(
     !/^[a-f0-9]{64}$/.test(entry.hash)
   ) {
     throw new Error('Invalid market journal entry');
+  }
+
+  if (
+    (entry.source !== undefined &&
+      (typeof entry.source !== 'string' ||
+       entry.source.length === 0)) ||
+    (entry.liquidityUsd !== undefined &&
+      (typeof entry.liquidityUsd !== 'number' ||
+       !Number.isFinite(entry.liquidityUsd) ||
+       entry.liquidityUsd < 0)) ||
+    ((entry.source === undefined) !==
+      (entry.liquidityUsd === undefined))
+  ) {
+    throw new Error('Invalid market journal metadata');
   }
 
   const engine = new PaperTradingEngine();

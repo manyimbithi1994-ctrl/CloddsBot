@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { PaperTradingEngine } from './paper-engine';
-import { validateMarketObservation } from './paper-market-data';
+import { validateSafePaperMarket } from './paper-market-safety';
 import { executePaperMarketDecision } from './paper-market-executor';
 import { acquirePaperLock } from './paper-lock';
 import {
@@ -60,15 +60,29 @@ export function processPaperMarketObservation(
       throw new Error('Market observation identity or order mismatch');
     }
 
-    // Reject unsafe price jumps before any simulated execution.
-    // The checkpoint validator has already checked current liquidity
-    // and trading-pair identity.
+    // Validate the complete market identity and price continuity.
     if (previous) {
-      validateMarketObservation(
-        observation,
-        previous.priceUsd,
-        nowMs
-      );
+      if (previous.source !== undefined &&
+          previous.liquidityUsd !== undefined) {
+        validateSafePaperMarket(
+          observation,
+          {
+            source: previous.source,
+            tokenMint: previous.tokenMint,
+            pairAddress: previous.pairAddress,
+            priceUsd: previous.priceUsd,
+            liquidityUsd: previous.liquidityUsd,
+            observedAt: previous.observedAt
+          },
+          nowMs
+        );
+      } else {
+        // Legacy journal records lack complete market metadata.
+        // Refuse further execution until safely migrated.
+        throw new Error(
+          'Legacy market journal requires migration'
+        );
+      }
     }
 
     const engine = new PaperTradingEngine();
@@ -92,6 +106,8 @@ export function processPaperMarketObservation(
       tokenMint: observation.tokenMint,
       pairAddress: observation.pairAddress!,
       priceUsd: observation.priceUsd,
+      source: observation.source,
+      liquidityUsd: observation.liquidityUsd,
       action: result.action,
       entryPriceUsd: result.entryPriceUsd,
       account: result.account,
