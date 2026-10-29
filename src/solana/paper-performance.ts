@@ -6,6 +6,11 @@ import {
 export interface PaperPerformanceReport {
   observations: number;
   completedTrades: number;
+  takeProfitExits: number;
+  stopLossExits: number;
+  unclassifiedExits: number;
+  takeProfitRealizedPnlUsd: number;
+  stopLossRealizedPnlUsd: number;
   winningTrades: number;
   losingTrades: number;
   breakevenTrades: number;
@@ -35,6 +40,11 @@ export function analyzePaperPerformance(
   }
 
   let completedTrades = 0;
+  let takeProfitExits = 0;
+  let stopLossExits = 0;
+  let unclassifiedExits = 0;
+  let takeProfitRealizedPnlUsd = 0;
+  let stopLossRealizedPnlUsd = 0;
   let winningTrades = 0;
   let losingTrades = 0;
   let breakevenTrades = 0;
@@ -64,6 +74,16 @@ export function analyzePaperPerformance(
       }
 
       completedTrades++;
+
+      if (entry.exitReason === 'TAKE_PROFIT') {
+        takeProfitExits++;
+        takeProfitRealizedPnlUsd += tradePnl;
+      } else if (entry.exitReason === 'STOP_LOSS') {
+        stopLossExits++;
+        stopLossRealizedPnlUsd += tradePnl;
+      } else {
+        unclassifiedExits++;
+      }
     }
 
     previousRealizedPnl = account.realizedDailyPnlUsd;
@@ -110,6 +130,11 @@ export function analyzePaperPerformance(
   return {
     observations: entries.length,
     completedTrades,
+    takeProfitExits,
+    stopLossExits,
+    unclassifiedExits,
+    takeProfitRealizedPnlUsd,
+    stopLossRealizedPnlUsd,
     winningTrades,
     losingTrades,
     breakevenTrades,
