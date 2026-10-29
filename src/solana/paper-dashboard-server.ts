@@ -7,6 +7,13 @@ import { openPaperTestSession } from './paper-test-session';
 import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
 import { createPaperTestConfig } from './paper-test-config';
+import { fetchPaperTokenPrice } from './paper-price-feed';
+import { validateSafePaperMarket } from './paper-market-safety';
+import { classifyMarketSnapshot } from './paper-market-snapshot';
+import { evaluateMarketFreshness } from './paper-market-freshness';
+import { processPaperMarketObservation } from './paper-market-runner';
+import type { PaperMarketObservation } from './paper-market-data';
+import type { MarketFreshnessState } from './paper-market-freshness';
 
 const directory = resolve(process.argv[2] ?? '');
 
@@ -38,7 +45,54 @@ if (
 
 let startingBalanceUsd = config.config.startingBalanceUsd;
 let observationIntervalSeconds = 15;
-let sessionStatus: 'STOPPED' | 'READY' = 'STOPPED';
+let sessionStatus: 'STOPPED' | 'RUNNING' | 'ERROR' = 'STOPPED';
+let tokenMint: string | null = null;
+let lastError: string | null = null;
+let previousObservation: PaperMarketObservation | null = null;
+let freshnessState: MarketFreshnessState | null = null;
+let loopTimer: ReturnType<typeof setTimeout> | null = null;
+let generation = 0;
+let busy = false;
+
+function stopLoop() {
+  generation += 1;
+  if (loopTimer) clearTimeout(loopTimer);
+  loopTimer = null;
+  sessionStatus = 'STOPPED';
+}
+
+async function pollMarket(run: number): Promise<void> {
+  if (run !== generation || sessionStatus !== 'RUNNING' || busy || !tokenMint) return;
+  busy = true;
+  try {
+    const observation = await fetchPaperTokenPrice(tokenMint);
+    if (run !== generation || sessionStatus !== 'RUNNING') return;
+    const validated = validateSafePaperMarket(observation, previousObservation);
+    const classification = classifyMarketSnapshot(validated, previousObservation);
+    const freshness = evaluateMarketFreshness(classification, freshnessState, Date.parse(validated.observedAt));
+    previousObservation = validated;
+    freshnessState = freshness.state;
+    if (freshness.status !== 'FRESH') {
+      throw new Error('Market quote unchanged too long; simulation halted');
+    }
+    if (run !== generation || sessionStatus !== 'RUNNING') return;
+    processPaperMarketObservation({
+      version: 1, observation: validated, freshness: freshness.state
+    }, sessionDirectory, Date.parse(validated.observedAt), createPaperTestConfig(startingBalanceUsd));
+    lastError = null;
+  } catch (error) {
+    if (run === generation) {
+      lastError = error instanceof Error ? error.message : 'Market polling failed';
+      sessionStatus = 'ERROR';
+      console.error('Paper market loop stopped:', lastError);
+    }
+  } finally {
+    busy = false;
+    if (run === generation && sessionStatus === 'RUNNING') {
+      loopTimer = setTimeout(() => { void pollMarket(run); }, observationIntervalSeconds * 1000);
+    }
+  }
+}
 const sessionsRoot = resolve('.paper-sessions');
 
 const host = '127.0.0.1';
@@ -83,6 +137,11 @@ const server = createServer(async (req, res) => {
         mkdirSync(sessionsRoot, { recursive: true, mode: 0o700 });
         const nextDir = join(sessionsRoot, 'session-' + randomUUID());
         openPaperTestSession(nextDir, requested);
+        stopLoop();
+        tokenMint = null;
+        previousObservation = null;
+        freshnessState = null;
+        lastError = null;
         sessionDirectory = realpathSync(nextDir);
         configPath = join(sessionDirectory, 'paper-session-config.json');
         journalPath = join(sessionDirectory, 'market-journal.jsonl');
@@ -95,8 +154,41 @@ const server = createServer(async (req, res) => {
       }
       if (url.pathname === '/api/session/start' || url.pathname === '/api/session/stop') {
         if (Object.keys(payload).length !== 0) { sendJson(400, { error: 'Unexpected fields' }); return; }
-        sessionStatus = url.pathname.endsWith('/start') ? 'READY' : 'STOPPED';
-        sendJson(200, { status: sessionStatus, marketPollingActive: false });
+        if (url.pathname.endsWith('/stop')) {
+          stopLoop();
+          sendJson(200, { status: sessionStatus, marketPollingActive: false });
+          return;
+        }
+        if (sessionStatus === 'RUNNING') {
+          sendJson(200, { status: sessionStatus, marketPollingActive: true });
+          return;
+        }
+        if (busy) { sendJson(409, { error: 'Previous observation still completing' }); return; }
+        if (!tokenMint) {
+          sendJson(409, { error: 'Select a Solana token mint before starting' });
+          return;
+        }
+        if (readMarketJournal(journalPath).length > 0) {
+          sendJson(409, { error: 'Start a new session for a new market run' });
+          return;
+        }
+        lastError = null;
+        previousObservation = null;
+        freshnessState = null;
+        sessionStatus = 'RUNNING';
+        generation += 1;
+        void pollMarket(generation);
+        sendJson(200, { status: sessionStatus, marketPollingActive: true });
+        return;
+      }
+      if (url.pathname === '/api/session/token') {
+        if (sessionStatus === 'RUNNING' || busy) { sendJson(409, { error: 'Stop the session before changing tokens' }); return; }
+        if (readMarketJournal(journalPath).length > 0) { sendJson(409, { error: 'Create a new session to select another token' }); return; }
+        if (typeof payload.tokenMint !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(payload.tokenMint)) {
+          sendJson(400, { error: 'Invalid Solana token mint address' }); return;
+        }
+        tokenMint = payload.tokenMint;
+        sendJson(200, { status: sessionStatus, tokenMint, marketPollingActive: false });
         return;
       }
       sendJson(404, { error: 'Not found' });
@@ -104,7 +196,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method !== 'GET') { res.writeHead(405); res.end('Method not allowed'); return; }
     if (url.pathname === '/api/session') {
-      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint: null, marketPollingActive: false });
+      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError });
       return;
     }
 
