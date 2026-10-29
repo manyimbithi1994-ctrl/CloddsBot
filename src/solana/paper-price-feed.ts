@@ -77,6 +77,8 @@ export async function fetchPaperTokenPrice(
     source: 'DEXSCREENER',
     tokenMint,
     priceUsd: Number(selected.priceUsd),
-    observedAt: new Date().toISOString()
+    observedAt: new Date().toISOString(),
+    pairAddress: selected.pairAddress,
+    liquidityUsd: selected.liquidity?.usd
   });
 }

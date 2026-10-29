@@ -3,6 +3,8 @@ export interface PaperMarketObservation {
   tokenMint: string;
   priceUsd: number;
   observedAt: string;
+  pairAddress?: string;
+  liquidityUsd?: number;
 }
 
 export interface PaperMarketPolicy {
@@ -34,6 +36,27 @@ export function validateMarketObservation(
     observation.priceUsd <= 0
   ) {
     throw new Error('Invalid market observation');
+  }
+
+  if (
+    observation.pairAddress !== undefined &&
+    (
+      typeof observation.pairAddress !== 'string' ||
+      observation.pairAddress.trim().length === 0
+    )
+  ) {
+    throw new Error('Invalid market pair identity');
+  }
+
+  if (
+    observation.liquidityUsd !== undefined &&
+    (
+      typeof observation.liquidityUsd !== 'number' ||
+      !Number.isFinite(observation.liquidityUsd) ||
+      observation.liquidityUsd <= 0
+    )
+  ) {
+    throw new Error('Invalid market liquidity');
   }
 
   const observedMs = Date.parse(observation.observedAt);
