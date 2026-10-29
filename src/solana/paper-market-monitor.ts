@@ -21,53 +21,60 @@ if (!mint) {
 mkdirSync(dir, { recursive: true });
 
 const statePath = join(dir, 'market-state.json');
-const release = acquirePaperLock(join(dir, 'monitor.lock'));
+async function main(): Promise<void> {
+  const release = acquirePaperLock(join(dir, 'monitor.lock'));
 
-try {
-  let previous: PaperMarketObservation | null = null;
+  try {
+    let previous: PaperMarketObservation | null = null;
 
-  if (existsSync(statePath)) {
-    const saved: unknown = JSON.parse(
-      readFileSync(statePath, 'utf8')
-    );
+    if (existsSync(statePath)) {
+      const saved: unknown = JSON.parse(
+        readFileSync(statePath, 'utf8')
+      );
 
-    if (
-      !saved ||
-      typeof saved !== 'object' ||
-      (saved as PaperMarketObservation).tokenMint !== mint
-    ) {
-      throw new Error('Stored market identity mismatch');
+      if (
+        !saved ||
+        typeof saved !== 'object' ||
+        (saved as PaperMarketObservation).tokenMint !== mint
+      ) {
+        throw new Error('Stored market identity mismatch');
+      }
+
+      previous = validateSafePaperMarket(
+        saved as PaperMarketObservation,
+        null,
+        Date.parse((saved as PaperMarketObservation).observedAt)
+      );
     }
 
-    previous = validateSafePaperMarket(
-      saved as PaperMarketObservation,
-      null,
-      Date.parse((saved as PaperMarketObservation).observedAt)
+    const observation = await fetchPaperTokenPrice(mint!);
+
+    const validated = validateSafePaperMarket(
+      observation,
+      previous
     );
+
+    const tempPath = `${statePath}.${process.pid}.tmp`;
+
+    writeFileSync(
+      tempPath,
+      JSON.stringify(validated, null, 2),
+      { flag: 'wx', mode: 0o600 }
+    );
+
+    renameSync(tempPath, statePath);
+
+    console.log(JSON.stringify({
+      mode: 'OBSERVATION_ONLY',
+      event: 'MARKET_OBSERVATION',
+      observation: validated
+    }, null, 2));
+  } finally {
+    release();
   }
-
-  const observation = await fetchPaperTokenPrice(mint);
-
-  const validated = validateSafePaperMarket(
-    observation,
-    previous
-  );
-
-  const tempPath = `${statePath}.${process.pid}.tmp`;
-
-  writeFileSync(
-    tempPath,
-    JSON.stringify(validated, null, 2),
-    { flag: 'wx', mode: 0o600 }
-  );
-
-  renameSync(tempPath, statePath);
-
-  console.log(JSON.stringify({
-    mode: 'OBSERVATION_ONLY',
-    event: 'MARKET_OBSERVATION',
-    observation: validated
-  }, null, 2));
-} finally {
-  release();
 }
+
+main().catch(error => {
+  console.error('Paper market monitor failed:', error);
+  process.exitCode = 1;
+});
