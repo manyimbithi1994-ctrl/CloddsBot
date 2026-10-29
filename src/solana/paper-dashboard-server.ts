@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
-import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync, mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { openPaperTestSession } from './paper-test-session';
 
 import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
@@ -12,16 +14,16 @@ if (!process.argv[2]) {
   throw new Error('Provide an existing paper session directory');
 }
 
-const sessionDirectory = realpathSync(directory);
+let sessionDirectory = realpathSync(directory);
 
 if (!statSync(sessionDirectory).isDirectory()) {
   throw new Error('Invalid session directory');
 }
 
-const configPath = join(sessionDirectory, 'paper-session-config.json');
-const journalPath = join(sessionDirectory, 'market-journal.jsonl');
+let configPath = join(sessionDirectory, 'paper-session-config.json');
+let journalPath = join(sessionDirectory, 'market-journal.jsonl');
 
-const config = JSON.parse(readFileSync(configPath, 'utf8'));
+let config = JSON.parse(readFileSync(configPath, 'utf8'));
 
 if (
   config.version !== 1 ||
@@ -34,20 +36,77 @@ if (
   throw new Error('Invalid paper session configuration');
 }
 
-const startingBalanceUsd = config.config.startingBalanceUsd;
+let startingBalanceUsd = config.config.startingBalanceUsd;
+let observationIntervalSeconds = 15;
+let sessionStatus: 'STOPPED' | 'READY' = 'STOPPED';
+const sessionsRoot = resolve('.paper-sessions');
 
 const host = '127.0.0.1';
 const port = 4173;
 
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   try {
-    if (req.method !== 'GET') {
-      res.writeHead(405);
-      res.end('Method not allowed');
+    const url = new URL(req.url ?? '/', `http://${host}:${port}`);
+
+    const sendJson = (status: number, data: unknown) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(data));
+    };
+
+    if (req.method === 'POST' && url.pathname.startsWith('/api/session/')) {
+      const origin = req.headers.origin;
+      const expectedOrigin = `http://${req.headers.host}`;
+      if (!origin || origin !== expectedOrigin || !req.headers.host || req.headers['sec-fetch-site'] === 'cross-site') {
+        sendJson(403, { error: 'Same-origin request required' });
+        return;
+      }
+      let bytes = 0;
+      let body = '';
+      for await (const chunk of req) {
+        bytes += Buffer.byteLength(chunk);
+        if (bytes > 4096) { sendJson(413, { error: 'Request too large' }); return; }
+        body += chunk.toString();
+      }
+      let payload: Record<string, unknown>;
+      try { payload = JSON.parse(body || '{}'); }
+      catch { sendJson(400, { error: 'Invalid JSON' }); return; }
+      if (url.pathname === '/api/session/create') {
+        if (payload.tokenMint !== null && payload.tokenMint !== '' && payload.tokenMint !== undefined) {
+          sendJson(400, { error: 'Token selection is not yet enabled' }); return;
+        }
+        if (payload.observationIntervalSeconds !== 15) {
+          sendJson(400, { error: 'Only the validated 15-second interval is supported' }); return;
+        }
+        let requested;
+        try { requested = createPaperTestConfig(payload.startingBalanceUsd as number); }
+        catch { sendJson(400, { error: 'Starting balance must be between $4 and $1,000,000' }); return; }
+        mkdirSync(sessionsRoot, { recursive: true, mode: 0o700 });
+        const nextDir = join(sessionsRoot, 'session-' + randomUUID());
+        openPaperTestSession(nextDir, requested);
+        sessionDirectory = realpathSync(nextDir);
+        configPath = join(sessionDirectory, 'paper-session-config.json');
+        journalPath = join(sessionDirectory, 'market-journal.jsonl');
+        config = { version: 1, config: requested };
+        startingBalanceUsd = requested.startingBalanceUsd;
+        observationIntervalSeconds = 15;
+        sessionStatus = 'STOPPED';
+        sendJson(201, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds });
+        return;
+      }
+      if (url.pathname === '/api/session/start' || url.pathname === '/api/session/stop') {
+        if (Object.keys(payload).length !== 0) { sendJson(400, { error: 'Unexpected fields' }); return; }
+        sessionStatus = url.pathname.endsWith('/start') ? 'READY' : 'STOPPED';
+        sendJson(200, { status: sessionStatus, marketPollingActive: false });
+        return;
+      }
+      sendJson(404, { error: 'Not found' });
       return;
     }
-
-    const url = new URL(req.url ?? '/', `http://${host}:${port}`);
+    if (req.method !== 'GET') { res.writeHead(405); res.end('Method not allowed'); return; }
+    if (url.pathname === '/api/session') {
+      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint: null, marketPollingActive: false });
+      return;
+    }
 
     if (url.pathname === '/api/performance') {
       const entries = readMarketJournal(journalPath);
