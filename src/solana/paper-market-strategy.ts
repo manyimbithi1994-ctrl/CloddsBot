@@ -3,7 +3,12 @@ import { evaluatePaperTradingGate } from './paper-trading-gate';
 
 export type PaperMarketDecision =
   | { action: 'BUY'; spendUsd: number; priceUsd: number }
-  | { action: 'SELL'; quantity: number; priceUsd: number }
+  | {
+      action: 'SELL';
+      quantity: number;
+      priceUsd: number;
+      exitReason: 'TAKE_PROFIT' | 'STOP_LOSS';
+    }
   | { action: 'HOLD'; reason: string }
   | { action: 'BLOCK'; reason: string };
 
@@ -76,11 +81,21 @@ export function decidePaperMarketAction(
 
   const change = (priceUsd - entryPriceUsd) / entryPriceUsd;
 
-  if (change >= 0.08 || change <= -0.05) {
+  if (change >= 0.08) {
     return {
       action: 'SELL',
       quantity: account.tokenQuantity,
-      priceUsd
+      priceUsd,
+      exitReason: 'TAKE_PROFIT'
+    };
+  }
+
+  if (change <= -0.05) {
+    return {
+      action: 'SELL',
+      quantity: account.tokenQuantity,
+      priceUsd,
+      exitReason: 'STOP_LOSS'
     };
   }
 

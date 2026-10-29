@@ -118,6 +118,9 @@ export function processPaperMarketObservation(
       source: observation.source,
       liquidityUsd: observation.liquidityUsd,
       action: result.action,
+      ...(result.exitReason
+        ? { exitReason: result.exitReason }
+        : {}),
       entryPriceUsd: result.entryPriceUsd,
       account: result.account,
       previousHash: previous?.hash ?? null

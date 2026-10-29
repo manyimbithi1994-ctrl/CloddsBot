@@ -23,6 +23,7 @@ export interface PaperMarketJournalEntry {
   source?: string;
   liquidityUsd?: number;
   action: 'BUY' | 'SELL' | 'HOLD' | 'BLOCK';
+  exitReason?: 'TAKE_PROFIT' | 'STOP_LOSS';
   entryPriceUsd: number | null;
   account: ReturnType<PaperTradingEngine['snapshot']>;
   previousHash: string | null;
@@ -64,6 +65,9 @@ export function validateMarketJournalEntry(
     !Number.isFinite(entry.priceUsd) ||
     entry.priceUsd <= 0 ||
     !['BUY', 'SELL', 'HOLD', 'BLOCK'].includes(entry.action!) ||
+    (entry.exitReason !== undefined &&
+      (entry.action !== 'SELL' ||
+       !['TAKE_PROFIT', 'STOP_LOSS'].includes(entry.exitReason))) ||
     !(entry.previousHash === null ||
       (typeof entry.previousHash === 'string' &&
        /^[a-f0-9]{64}$/.test(entry.previousHash))) ||

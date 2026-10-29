@@ -5,6 +5,7 @@ import type { PaperMarketCheckpoint } from './paper-market-checkpoint';
 export interface PaperExecutionResult {
   action: 'BUY' | 'SELL' | 'HOLD' | 'BLOCK';
   reason?: string;
+  exitReason?: 'TAKE_PROFIT' | 'STOP_LOSS';
   entryPriceUsd: number | null;
   account: ReturnType<PaperTradingEngine['snapshot']>;
 }
@@ -46,6 +47,7 @@ export function executePaperMarketDecision(
 
     return {
       action: 'SELL',
+      exitReason: decision.exitReason,
       entryPriceUsd: null,
       account: engine.snapshot()
     };
