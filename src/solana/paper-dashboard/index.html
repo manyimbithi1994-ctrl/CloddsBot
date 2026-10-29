@@ -75,7 +75,8 @@ th { color: #94a3b8; }
   <p>Configure a virtual account. No wallets, live trading, or automatic market polling.</p>
   <form id="setup" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
     <label>Starting balance (USD)<br><input id="balance" type="number" min="4" max="1000000" step="0.01" value="20" required></label>
-    <label>Token<br><input value="Select token later" disabled></label>
+    <label>Solana token mint<br><input id="token" placeholder="Paste Solana mint address" style="min-width:280px"></label>
+    <button id="save-token" type="button">Select token</button>
     <label>Observation interval<br><input value="15 seconds" disabled></label>
     <button type="submit">Create new session</button>
   </form>
@@ -124,9 +125,16 @@ async function sessionRequest(action, payload) {
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Session request failed');
-  state.textContent = 'Session: ' + result.status + ' · Market polling inactive';
+  state.textContent = 'Session: ' + result.status +
+    ' · Market polling ' + (result.marketPollingActive ? 'active' : 'inactive') +
+    (result.tokenMint ? ' · Token: ' + result.tokenMint : '');
   await refresh();
 }
+document.getElementById('save-token').addEventListener('click', async () => {
+  try {
+    await sessionRequest('token', { tokenMint: document.getElementById('token').value.trim() });
+  } catch (error) { state.textContent = 'Error: ' + error.message; }
+});
 document.getElementById('setup').addEventListener('submit', async event => {
   event.preventDefault();
   try {
@@ -143,7 +151,10 @@ for (const action of ['start', 'stop']) {
   });
 }
 fetch('/api/session').then(r => r.json()).then(data => {
-  state.textContent = 'Session: ' + data.status + ' · Market polling inactive';
+  state.textContent = 'Session: ' + data.status +
+    ' · Market polling ' + (data.marketPollingActive ? 'active' : 'inactive') +
+    (data.lastError ? ' · Error: ' + data.lastError : '');
+  if (data.tokenMint) document.getElementById('token').value = data.tokenMint;
 }).catch(() => { state.textContent = 'Session status unavailable'; });
 const usd = n => '$' + Number(n).toFixed(2);
 const percent = n => Number(n).toFixed(1) + '%';
@@ -244,7 +255,14 @@ async function refresh() {
     }
 
     document.getElementById('status').textContent =
-      'Read-only · Last refreshed ' + new Date().toLocaleTimeString();
+      'Paper simulation · Last refreshed ' + new Date().toLocaleTimeString();
+    const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      state.textContent = 'Session: ' + session.status +
+        ' · Market polling ' + (session.marketPollingActive ? 'active' : 'inactive') +
+        (session.lastError ? ' · Error: ' + session.lastError : '');
+    }
 
   } catch (error) {
     document.getElementById('status').textContent =
