@@ -7,6 +7,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { fetchPaperTokenPrice } from './paper-price-feed';
+import { classifyMarketSnapshot } from './paper-market-snapshot';
 import { validateSafePaperMarket } from './paper-market-safety';
 import type { PaperMarketObservation } from './paper-market-data';
 import { acquirePaperLock } from './paper-lock';
@@ -54,6 +55,11 @@ async function main(): Promise<void> {
       previous
     );
 
+    const snapshotStatus = classifyMarketSnapshot(
+      validated,
+      previous
+    );
+
     const tempPath = `${statePath}.${process.pid}.tmp`;
 
     writeFileSync(
@@ -67,6 +73,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       mode: 'OBSERVATION_ONLY',
       event: 'MARKET_OBSERVATION',
+      snapshotStatus,
       observation: validated
     }, null, 2));
   } finally {
