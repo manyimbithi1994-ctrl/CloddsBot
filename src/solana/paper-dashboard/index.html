@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CloddsBot Paper Trading Dashboard</title>
+<style>
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #0b1020;
+  color: #e5e7eb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; }
+main { max-width: 1150px; margin: auto; }
+header { margin-bottom: 25px; }
+h1 { margin: 0; font-size: 27px; }
+h2 { font-size: 17px; margin: 0 0 18px; }
+p { color: #94a3b8; }
+small { color: #94a3b8; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 14px;
+}
+.card,.panel {
+  background: #151d31;
+  border: 1px solid #26334a;
+  border-radius: 12px;
+  padding: 18px;
+}
+.card label {
+  display: block;
+  color: #94a3b8;
+  font-size: 13px;
+  margin-bottom: 9px;
+}
+.value { font-size: 25px; font-weight: 750; }
+.positive { color: #4ade80; }
+.negative { color: #fb7185; }
+.panel { margin-top: 18px; }
+svg { width: 100%; height: 240px; }
+table { width: 100%; border-collapse: collapse; }
+th,td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #26334a;
+  text-align: left;
+  font-size: 13px;
+}
+th { color: #94a3b8; }
+.table-wrap { overflow-x: auto; }
+#status { font-size: 12px; }
+@media(max-width:800px) {
+  .grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:480px) {
+  body { padding: 12px; }
+  .grid { gap: 9px; }
+  .card { padding: 13px; }
+  .value { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>CloddsBot Paper Trading</h1>
+  <p>Virtual trading performance · No real orders</p>
+  <small id="status">Loading session...</small>
+</header>
+
+<section class="grid" id="metrics"></section>
+
+<section class="panel">
+  <h2>Equity Curve</h2>
+  <svg id="equity" viewBox="0 0 800 240"
+       preserveAspectRatio="none"
+       aria-label="Virtual account equity curve"></svg>
+</section>
+
+<section class="panel">
+  <h2>Trading History</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Exit reason</th>
+          <th>Market price</th>
+          <th>Cash</th>
+          <th>Cumulative realized P&L</th>
+        </tr>
+      </thead>
+      <tbody id="trades"></tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+<script>
+const usd = n => '$' + Number(n).toFixed(2);
+const percent = n => Number(n).toFixed(1) + '%';
+
+function metric(label, value, cls = '') {
+  return `<div class="card">
+    <label>${label}</label>
+    <div class="value ${cls}">${value}</div>
+  </div>`;
+}
+
+function drawEquity(points, start) {
+  const svg = document.getElementById('equity');
+  const values = [start, ...points.map(p => p.equityUsd)];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.01);
+
+  const coordinates = values.map((value, i) => {
+    const x = values.length === 1
+      ? 0
+      : (i / (values.length - 1)) * 800;
+    const y = 220 - ((value - min) / range) * 200;
+    return `${x},${y}`;
+  }).join(' ');
+
+  svg.replaceChildren();
+
+  const line = document.createElementNS(
+    'http://www.w3.org/2000/svg', 'polyline'
+  );
+
+  line.setAttribute('points', coordinates);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', '#38bdf8');
+  line.setAttribute('stroke-width', '3');
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+
+  svg.appendChild(line);
+}
+
+async function refresh() {
+  try {
+    const response = await fetch('/api/performance', {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) throw new Error('Session data unavailable');
+
+    const { report: r, equity, trades } = await response.json();
+
+    document.getElementById('metrics').innerHTML = [
+      metric('Starting balance', usd(r.startingBalanceUsd)),
+      metric('Current equity', usd(r.currentEquityUsd)),
+      metric(
+        'Realized P&L',
+        usd(r.netRealizedPnlUsd),
+        r.netRealizedPnlUsd >= 0 ? 'positive' : 'negative'
+      ),
+      metric('Completed trades', r.completedTrades),
+      metric('Win rate', percent(r.winRatePercent)),
+      metric(
+        'Profit factor',
+        r.profitFactor === null
+          ? 'N/A'
+          : Number(r.profitFactor).toFixed(2)
+      ),
+      metric('Maximum drawdown', percent(r.maximumDrawdownPercent)),
+      metric('Open positions', r.openPositions),
+      metric('Take-profit exits', r.takeProfitExits),
+      metric('Stop-loss exits', r.stopLossExits),
+      metric('Unclassified exits', r.unclassifiedExits),
+      metric('Observations', r.observations)
+    ].join('');
+
+    drawEquity(equity, r.startingBalanceUsd);
+
+    const tbody = document.getElementById('trades');
+    tbody.replaceChildren();
+
+    for (const trade of trades.slice(-100).reverse()) {
+      const tr = document.createElement('tr');
+
+      for (const value of [
+        new Date(trade.time).toLocaleString(),
+        trade.action,
+        trade.exitReason ?? '—',
+        String(trade.priceUsd),
+        usd(trade.cashUsd),
+        usd(trade.realizedPnlUsd)
+      ]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('status').textContent =
+      'Read-only · Last refreshed ' + new Date().toLocaleTimeString();
+
+  } catch (error) {
+    document.getElementById('status').textContent =
+      'Error: ' + error.message;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
