@@ -1,5 +1,8 @@
 import {
-  appendFileSync,
+  closeSync,
+  fsyncSync,
+  openSync,
+  writeSync,
   existsSync,
   mkdirSync,
   readFileSync
@@ -97,9 +100,29 @@ export function appendPaperJournal(
 
   mkdirSync(dirname(path), { recursive: true });
 
-  appendFileSync(
-    path,
-    JSON.stringify(entry) + '\n',
-    { encoding: 'utf8', mode: 0o600 }
-  );
+  const fd = openSync(path, 'a', 0o600);
+
+  try {
+    const record = Buffer.from(JSON.stringify(entry) + '\n');
+    let offset = 0;
+
+    while (offset < record.length) {
+      const written = writeSync(
+        fd,
+        record,
+        offset,
+        record.length - offset
+      );
+
+      if (written <= 0) {
+        throw new Error('Paper journal write failed');
+      }
+
+      offset += written;
+    }
+
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
