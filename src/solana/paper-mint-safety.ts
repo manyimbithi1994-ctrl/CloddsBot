@@ -18,7 +18,7 @@ export interface MintSafetyPreflight {
 const MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const TOKEN_PROGRAMS = new Set([
   'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-  'TokenzQdBNbLqP5VEhdkAS6EPF5n4PBHhAvd9UZsP7'
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 ]);
 
 export function evaluateMintSafetyResponse(
