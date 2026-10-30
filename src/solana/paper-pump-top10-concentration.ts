@@ -3,6 +3,7 @@
  * when necessary; never claim a pass if fewer than ten are available.
  */
 import {PublicKey} from '@solana/web3.js';
+import {evaluateConcentrationPolicy} from './paper-concentration-policy';
 const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
 const mints=['3msFLe2RXjfC6wHkkGjvXFFjfMf7Fvmc42HeaEBmpump','Hq76LjXyS9eJeTXHqkMEjDAdMuzQ41K14Lx35yKQ5Y1b'];
@@ -74,7 +75,13 @@ async function main():Promise<void>{
    reason=percent>40?'TOP_TEN_NON_CURVE_ACCOUNTS_OVER_40_PERCENT':
     'TOP_TEN_NON_CURVE_ACCOUNTS_AT_OR_BELOW_40_PERCENT';
   }catch(e){status='UNKNOWN';reason=e instanceof Error?e.message:String(e);}
-  console.log(JSON.stringify({mint,status,reason,topTenNonCurveSharePercent:percent,
+  const policyVerdict=evaluateConcentrationPolicy({
+   topTenNonCurveSharePercent:percent,
+   topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
+   excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted,
+   distinctBeneficialOwnersVerified:false
+  });
+  console.log(JSON.stringify({mint,status,reason,policyVerdict,topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
    outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
