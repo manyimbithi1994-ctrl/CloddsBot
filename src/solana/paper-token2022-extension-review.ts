@@ -37,3 +37,5 @@ async function main():Promise<void>{
  console.log(JSON.stringify({mode:'READ_ONLY',rpcRequests,approvedForTrading:0}));
 }
 void main().catch(e=>{console.error(e instanceof Error?e.message:String(e));process.exitCode=1;});
+
+export {};
