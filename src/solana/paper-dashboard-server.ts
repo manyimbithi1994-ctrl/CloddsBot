@@ -7,6 +7,7 @@ import { openPaperTestSession } from './paper-test-session';
 import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
 import { analyzePaperMomentum } from './paper-momentum-research';
+import { assessResearchCandidate } from './paper-candidate-research';
 import { createPaperTestConfig } from './paper-test-config';
 import { fetchPaperTokenPrice } from './paper-price-feed';
 import { discoverSolanaCandidates } from './paper-token-discovery';
@@ -162,6 +163,25 @@ const server = createServer(async (req, res) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
+
+    if (req.method === 'GET' && url.pathname === '/api/research/candidates') {
+      // Reuse the bounded discovery cache. No token selection or trading.
+      const discovered = discoveryCache;
+      if (!discovered) {
+        sendJson(200, { status: 'DISCOVERY_REQUIRED', assessments: [],
+          message: 'Run manual token discovery first; no automatic trades' });
+        return;
+      }
+      const momentum = analyzePaperMomentum(readMarketJournal(journalPath), 5);
+      sendJson(200, {
+        status: 'RESEARCH_ONLY',
+        discoveryCacheAgeSeconds: Math.round((Date.now() - discoveryCacheAt) / 1000),
+        assessments: discovered.candidates.map(candidate =>
+          assessResearchCandidate(candidate,
+            momentum.tokenMint === candidate.mint ? momentum : null))
+      });
+      return;
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/research/momentum') {
       const windowRaw = url.searchParams.get('minutes');
