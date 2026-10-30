@@ -13,7 +13,8 @@ const base = {
   pairAddress: 'test-pair',
   pairCreatedAt: '2020-01-01T00:00:00.000Z',
   volumeLiquidityRatio: 0.32,
-  provenance: 'UNVERIFIED' as const
+  provenance: 'UNVERIFIED' as const,
+  pumpSuffixHint: false
 };
 const eligible = screenDiscoveryCandidate(base);
 assert.equal(eligible.eligible, true);
@@ -48,3 +49,13 @@ const missingAge = screenDiscoveryCandidate({ ...base, pairCreatedAt: null });
 assert.equal(missingAge.eligible, false);
 const lowActivity = screenDiscoveryCandidate({ ...base, buys24h: 30, sells24h: 20 });
 assert.equal(lowActivity.eligible, false);
+
+const suffixMint = 'EjbgFA8vFhswojnNLxQVKYKiDsm3PgM6w7JuehfPpump';
+const hinted = screenDiscoveryCandidate({
+  ...base, mint: suffixMint, pumpSuffixHint: true
+});
+assert.equal(hinted.pumpSuffixHint, true);
+assert.equal(hinted.provenance, 'UNVERIFIED');
+assert.throws(() => screenDiscoveryCandidate({
+  ...base, mint: suffixMint, pumpSuffixHint: false
+}), /suffix hint/);
