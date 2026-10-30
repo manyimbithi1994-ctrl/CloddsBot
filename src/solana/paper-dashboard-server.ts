@@ -104,7 +104,7 @@ function persistSelection() {
   const temp = activePointerPath + '.' + randomUUID() + '.tmp';
   writeFileSync(temp, JSON.stringify({
     version: 1, sessionDirectory, tokenMint
-  }) + '\\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  }) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   renameSync(temp, activePointerPath);
 }
 
