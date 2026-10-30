@@ -8,6 +8,7 @@ import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
 import { createPaperTestConfig } from './paper-test-config';
 import { fetchPaperTokenPrice } from './paper-price-feed';
+import { discoverSolanaCandidates } from './paper-token-discovery';
 import { validateSafePaperMarket } from './paper-market-safety';
 import { classifyMarketSnapshot } from './paper-market-snapshot';
 import { evaluateMarketFreshness } from './paper-market-freshness';
@@ -210,6 +211,13 @@ const server = createServer(async (req, res) => {
     if (req.method !== 'GET') { res.writeHead(405); res.end('Method not allowed'); return; }
     if (url.pathname === '/api/session') {
       sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError });
+      return;
+    }
+
+    if (url.pathname === '/api/discovery') {
+      // Explicit GET only. No automatic polling or trading from discovery.
+      const result = await discoverSolanaCandidates();
+      sendJson(200, result);
       return;
     }
 
