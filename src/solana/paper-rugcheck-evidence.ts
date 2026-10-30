@@ -30,7 +30,7 @@ export function assessRugcheckReport(report:unknown,mint:string):{status:'BLOCK'
    const calculatedPercent=ordered.slice(0,10).reduce((s,h)=>s+((h as Obj).pct as number),0);
    topTenReportedPercent=calculatedPercent;
    if(calculatedPercent>100.01)reasons.push('HOLDER_TOTAL_INCONSISTENT');
-   if(calculatedPercent>40)reasons.push('TOP_TEN_REPORTED_OVER_40_PERCENT_UNATTRIBUTED');
+   if(calculatedPercent>40)reasons.push('REPORTED_CONCENTRATION_REQUIRES_CURVE_CUSTODY_ATTRIBUTION');
   }
   if(holders.length<10)reasons.push('FEWER_THAN_TEN_REPORTED_HOLDERS');
  }
