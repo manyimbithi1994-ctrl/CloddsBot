@@ -87,6 +87,18 @@ th { color: #94a3b8; }
   </div>
   <p><small>Select a token, then Start to poll read-only prices every 15 seconds and simulate trades. Stop halts polling. Existing sessions are preserved.</small></p>
 </section>
+<section class="panel" aria-label="Read-only token discovery">
+  <h2>Token discovery — research only</h2>
+  <p>Manual lookup of recently profiled Solana tokens. Pump.fun origin is not verified. Screening scores are not buy signals.</p>
+  <button id="discover" type="button">Find candidate tokens</button>
+  <small id="discovery-status">No discovery request made</small>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Token mint</th><th>Liquidity</th><th>24h volume</th><th>24h buys / sells</th><th>Score</th><th>Screen</th></tr></thead>
+      <tbody id="discovery-rows"></tbody>
+    </table>
+  </div>
+</section>
 <section class="grid" id="metrics"></section>
 
 <section class="panel">
@@ -156,7 +168,399 @@ fetch('/api/session').then(r => r.json()).then(data => {
     (data.lastError ? ' · Error: ' + data.lastError : '');
   if (data.tokenMint) document.getElementById('token').value = data.tokenMint;
 }).catch(() => { state.textContent = 'Session status unavailable'; });
-const usd = n => '$' + Number(n).toFixed(2);
+document.getElementById('discover').addEventListener('click', async () => {
+  const button = document.getElementById('discover');
+  const status = document.getElementById('discovery-status');
+  const tbody = document.getElementById('discovery-rows');
+  button.disabled = true;
+  status.textContent = 'Fetching read-only candidates...';
+  try {
+    const response = await fetch('/api/discovery', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Discovery request failed (HTTP ' + response.status + ')');
+    const data = await response.json();
+    tbody.replaceChildren();
+    for (const candidate of data.candidates) {
+      const tr = document.createElement('tr');
+      const values = [
+        candidate.mint,
+        candidate.liquidityUsd === null ? 'Unknown' : '
+const percent = n => Number(n).toFixed(1) + '%';
+
+function metric(label, value, cls = '') {
+  return `<div class="card">
+    <label>${label}</label>
+    <div class="value ${cls}">${value}</div>
+  </div>`;
+}
+
+function drawEquity(points, start) {
+  const svg = document.getElementById('equity');
+  const values = [start, ...points.map(p => p.equityUsd)];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.01);
+
+  const coordinates = values.map((value, i) => {
+    const x = values.length === 1
+      ? 0
+      : (i / (values.length - 1)) * 800;
+    const y = 220 - ((value - min) / range) * 200;
+    return `${x},${y}`;
+  }).join(' ');
+
+  svg.replaceChildren();
+
+  const line = document.createElementNS(
+    'http://www.w3.org/2000/svg', 'polyline'
+  );
+
+  line.setAttribute('points', coordinates);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', '#38bdf8');
+  line.setAttribute('stroke-width', '3');
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+
+  svg.appendChild(line);
+}
+
+async function refresh() {
+  try {
+    const response = await fetch('/api/performance', {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) throw new Error('Session data unavailable');
+
+    const { report: r, equity, trades } = await response.json();
+
+    document.getElementById('metrics').innerHTML = [
+      metric('Starting balance', usd(r.startingBalanceUsd)),
+      metric('Current equity', usd(r.currentEquityUsd)),
+      metric(
+        'Realized P&L',
+        usd(r.netRealizedPnlUsd),
+        r.netRealizedPnlUsd >= 0 ? 'positive' : 'negative'
+      ),
+      metric('Completed trades', r.completedTrades),
+      metric('Win rate', percent(r.winRatePercent)),
+      metric(
+        'Profit factor',
+        r.profitFactor === null
+          ? 'N/A'
+          : Number(r.profitFactor).toFixed(2)
+      ),
+      metric('Maximum drawdown', percent(r.maximumDrawdownPercent)),
+      metric('Open positions', r.openPositions),
+      metric('Take-profit exits', r.takeProfitExits),
+      metric('Stop-loss exits', r.stopLossExits),
+      metric('Unclassified exits', r.unclassifiedExits),
+      metric('Observations', r.observations)
+    ].join('');
+
+    drawEquity(equity, r.startingBalanceUsd);
+
+    const tbody = document.getElementById('trades');
+    tbody.replaceChildren();
+
+    for (const trade of trades.slice(-100).reverse()) {
+      const tr = document.createElement('tr');
+
+      for (const value of [
+        new Date(trade.time).toLocaleString(),
+        trade.action,
+        trade.exitReason ?? '—',
+        String(trade.priceUsd),
+        usd(trade.cashUsd),
+        usd(trade.realizedPnlUsd)
+      ]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('status').textContent =
+      'Paper simulation · Last refreshed ' + new Date().toLocaleTimeString();
+    const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      state.textContent = 'Session: ' + session.status +
+        ' · Market polling ' + (session.marketPollingActive ? 'active' : 'inactive') +
+        (session.lastError ? ' · Error: ' + session.lastError : '');
+    }
+
+  } catch (error) {
+    document.getElementById('status').textContent =
+      'Error: ' + error.message;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
+ + candidate.liquidityUsd.toFixed(0),
+        candidate.volume24hUsd === null ? 'Unknown' : '
+const percent = n => Number(n).toFixed(1) + '%';
+
+function metric(label, value, cls = '') {
+  return `<div class="card">
+    <label>${label}</label>
+    <div class="value ${cls}">${value}</div>
+  </div>`;
+}
+
+function drawEquity(points, start) {
+  const svg = document.getElementById('equity');
+  const values = [start, ...points.map(p => p.equityUsd)];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.01);
+
+  const coordinates = values.map((value, i) => {
+    const x = values.length === 1
+      ? 0
+      : (i / (values.length - 1)) * 800;
+    const y = 220 - ((value - min) / range) * 200;
+    return `${x},${y}`;
+  }).join(' ');
+
+  svg.replaceChildren();
+
+  const line = document.createElementNS(
+    'http://www.w3.org/2000/svg', 'polyline'
+  );
+
+  line.setAttribute('points', coordinates);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', '#38bdf8');
+  line.setAttribute('stroke-width', '3');
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+
+  svg.appendChild(line);
+}
+
+async function refresh() {
+  try {
+    const response = await fetch('/api/performance', {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) throw new Error('Session data unavailable');
+
+    const { report: r, equity, trades } = await response.json();
+
+    document.getElementById('metrics').innerHTML = [
+      metric('Starting balance', usd(r.startingBalanceUsd)),
+      metric('Current equity', usd(r.currentEquityUsd)),
+      metric(
+        'Realized P&L',
+        usd(r.netRealizedPnlUsd),
+        r.netRealizedPnlUsd >= 0 ? 'positive' : 'negative'
+      ),
+      metric('Completed trades', r.completedTrades),
+      metric('Win rate', percent(r.winRatePercent)),
+      metric(
+        'Profit factor',
+        r.profitFactor === null
+          ? 'N/A'
+          : Number(r.profitFactor).toFixed(2)
+      ),
+      metric('Maximum drawdown', percent(r.maximumDrawdownPercent)),
+      metric('Open positions', r.openPositions),
+      metric('Take-profit exits', r.takeProfitExits),
+      metric('Stop-loss exits', r.stopLossExits),
+      metric('Unclassified exits', r.unclassifiedExits),
+      metric('Observations', r.observations)
+    ].join('');
+
+    drawEquity(equity, r.startingBalanceUsd);
+
+    const tbody = document.getElementById('trades');
+    tbody.replaceChildren();
+
+    for (const trade of trades.slice(-100).reverse()) {
+      const tr = document.createElement('tr');
+
+      for (const value of [
+        new Date(trade.time).toLocaleString(),
+        trade.action,
+        trade.exitReason ?? '—',
+        String(trade.priceUsd),
+        usd(trade.cashUsd),
+        usd(trade.realizedPnlUsd)
+      ]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('status').textContent =
+      'Paper simulation · Last refreshed ' + new Date().toLocaleTimeString();
+    const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      state.textContent = 'Session: ' + session.status +
+        ' · Market polling ' + (session.marketPollingActive ? 'active' : 'inactive') +
+        (session.lastError ? ' · Error: ' + session.lastError : '');
+    }
+
+  } catch (error) {
+    document.getElementById('status').textContent =
+      'Error: ' + error.message;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
+ + candidate.volume24hUsd.toFixed(0),
+        candidate.buys24h === null ? 'Unknown' : candidate.buys24h + ' / ' + candidate.sells24h,
+        candidate.score,
+        candidate.eligible ? 'Passes preliminary metrics; origin unverified' : candidate.reasons.join('; ')
+      ];
+      for (const value of values) {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    status.textContent = data.candidates.length + ' Solana profiles checked · Pump.fun origin unverified · No trades';
+  } catch (error) {
+    status.textContent = 'Error: ' + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+const usd = n => '
+const percent = n => Number(n).toFixed(1) + '%';
+
+function metric(label, value, cls = '') {
+  return `<div class="card">
+    <label>${label}</label>
+    <div class="value ${cls}">${value}</div>
+  </div>`;
+}
+
+function drawEquity(points, start) {
+  const svg = document.getElementById('equity');
+  const values = [start, ...points.map(p => p.equityUsd)];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.01);
+
+  const coordinates = values.map((value, i) => {
+    const x = values.length === 1
+      ? 0
+      : (i / (values.length - 1)) * 800;
+    const y = 220 - ((value - min) / range) * 200;
+    return `${x},${y}`;
+  }).join(' ');
+
+  svg.replaceChildren();
+
+  const line = document.createElementNS(
+    'http://www.w3.org/2000/svg', 'polyline'
+  );
+
+  line.setAttribute('points', coordinates);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', '#38bdf8');
+  line.setAttribute('stroke-width', '3');
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+
+  svg.appendChild(line);
+}
+
+async function refresh() {
+  try {
+    const response = await fetch('/api/performance', {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) throw new Error('Session data unavailable');
+
+    const { report: r, equity, trades } = await response.json();
+
+    document.getElementById('metrics').innerHTML = [
+      metric('Starting balance', usd(r.startingBalanceUsd)),
+      metric('Current equity', usd(r.currentEquityUsd)),
+      metric(
+        'Realized P&L',
+        usd(r.netRealizedPnlUsd),
+        r.netRealizedPnlUsd >= 0 ? 'positive' : 'negative'
+      ),
+      metric('Completed trades', r.completedTrades),
+      metric('Win rate', percent(r.winRatePercent)),
+      metric(
+        'Profit factor',
+        r.profitFactor === null
+          ? 'N/A'
+          : Number(r.profitFactor).toFixed(2)
+      ),
+      metric('Maximum drawdown', percent(r.maximumDrawdownPercent)),
+      metric('Open positions', r.openPositions),
+      metric('Take-profit exits', r.takeProfitExits),
+      metric('Stop-loss exits', r.stopLossExits),
+      metric('Unclassified exits', r.unclassifiedExits),
+      metric('Observations', r.observations)
+    ].join('');
+
+    drawEquity(equity, r.startingBalanceUsd);
+
+    const tbody = document.getElementById('trades');
+    tbody.replaceChildren();
+
+    for (const trade of trades.slice(-100).reverse()) {
+      const tr = document.createElement('tr');
+
+      for (const value of [
+        new Date(trade.time).toLocaleString(),
+        trade.action,
+        trade.exitReason ?? '—',
+        String(trade.priceUsd),
+        usd(trade.cashUsd),
+        usd(trade.realizedPnlUsd)
+      ]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('status').textContent =
+      'Paper simulation · Last refreshed ' + new Date().toLocaleTimeString();
+    const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
+    if (sessionResponse.ok) {
+      const session = await sessionResponse.json();
+      state.textContent = 'Session: ' + session.status +
+        ' · Market polling ' + (session.marketPollingActive ? 'active' : 'inactive') +
+        (session.lastError ? ' · Error: ' + session.lastError : '');
+    }
+
+  } catch (error) {
+    document.getElementById('status').textContent =
+      'Error: ' + error.message;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
+ + Number(n).toFixed(2);
 const percent = n => Number(n).toFixed(1) + '%';
 
 function metric(label, value, cls = '') {
