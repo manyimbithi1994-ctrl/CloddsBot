@@ -8,6 +8,7 @@ import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
 import { analyzePaperMomentum } from './paper-momentum-research';
 import { assessResearchCandidate } from './paper-candidate-research';
+import { readTokenResearchSummaries } from './paper-research-summary';
 import { createPaperTestConfig } from './paper-test-config';
 import { fetchPaperTokenPrice } from './paper-price-feed';
 import { discoverSolanaCandidates } from './paper-token-discovery';
@@ -163,6 +164,14 @@ const server = createServer(async (req, res) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
+
+    if (req.method === 'GET' && url.pathname === '/api/research/watchlist') {
+      const tokens = readTokenResearchSummaries();
+      sendJson(200, { mode: 'RESEARCH_ONLY', tokenCount: tokens.length,
+        readyCount: tokens.filter(token => token.status === 'READY').length,
+        tokens, automatedTradingEnabled: false });
+      return;
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/research/candidates') {
       // Reuse the bounded discovery cache. No token selection or trading.
