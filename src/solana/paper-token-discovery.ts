@@ -18,6 +18,7 @@ export interface DiscoveryCandidate {
   eligible: boolean;
   reasons: string[];
   provenance: 'UNVERIFIED';
+  pumpSuffixHint: boolean;
 }
 
 const MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -27,6 +28,11 @@ const MAX_CANDIDATES = 12;
 type Dict = Record<string, unknown>;
 const obj = (x: unknown): Dict | null =>
   x !== null && typeof x === 'object' && !Array.isArray(x) ? x as Dict : null;
+const pairTimestamp = (x: unknown): string | null => {
+  if (typeof x !== 'number' || !Number.isSafeInteger(x) || x <= 0) return null;
+  const date = new Date(x);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+};
 const positive = (x: unknown): number | null =>
   typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null;
 
@@ -45,6 +51,8 @@ export function screenDiscoveryCandidate(
 ): DiscoveryCandidate {
   const reasons: string[] = [];
   if (candidate.provenance !== 'UNVERIFIED') throw new Error('Invalid provenance');
+  if (candidate.pumpSuffixHint !== candidate.mint.endsWith('pump'))
+    throw new Error('Invalid Pump.fun suffix hint');
   if (candidate.liquidityUsd === null || candidate.liquidityUsd < 10000)
     reasons.push('Liquidity below $10,000 or unavailable');
   if (candidate.volume24hUsd === null || candidate.volume24hUsd < 5000)
@@ -123,15 +131,14 @@ export async function discoverSolanaCandidates(): Promise<{
       buys24h: positive(txns?.buys),
       sells24h: positive(txns?.sells),
       pairAddress: typeof pair?.pairAddress === 'string' ? pair.pairAddress : null,
-      pairCreatedAt: typeof pair?.pairCreatedAt === 'number' &&
-        Number.isFinite(pair.pairCreatedAt) && pair.pairCreatedAt > 0
-        ? new Date(pair.pairCreatedAt).toISOString() : null,
+      pairCreatedAt: pairTimestamp(pair?.pairCreatedAt),
       volumeLiquidityRatio: positive(obj(pair?.liquidity)?.usd) !== null &&
         positive(obj(pair?.liquidity)?.usd)! > 0 &&
         positive(obj(pair?.volume)?.h24) !== null
         ? positive(obj(pair?.volume)?.h24)! / positive(obj(pair?.liquidity)?.usd)!
         : null,
-      provenance: 'UNVERIFIED'
+      provenance: 'UNVERIFIED',
+      pumpSuffixHint: profile.mint.endsWith('pump')
     });
     candidates.push(candidate);
   }
