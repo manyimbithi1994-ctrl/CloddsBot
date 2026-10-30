@@ -53,9 +53,21 @@ async function main():Promise<void>{
     const info=details[i]?.data?.parsed?.info;
     const owner=info?.owner;
     const raw=accounts[i]?.amount;
+    const parsedAmount=info?.tokenAmount?.amount;
+    const parsedMint=info?.mint;
+    const accountProgram=details[i]?.owner;
     if(typeof owner!=='string'||typeof raw!=='string'||!/^\d+$/.test(raw))
      throw Error('UNPARSEABLE_TOKEN_ACCOUNT');
-    if(owner===curve){curveAccounts++;observedCurveBalance+=BigInt(raw);continue;}
+    if(parsedMint!==mint||parsedAmount!==raw)
+     throw Error('TOKEN_ACCOUNT_MINT_OR_BALANCE_MISMATCH');
+    if(accountProgram!=='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'&&
+       accountProgram!=='TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+     throw Error('UNEXPECTED_TOKEN_ACCOUNT_PROGRAM');
+    if(owner===curve){
+     // Custody is not excluded unless the account is demonstrably controlled
+     // by the expected bonding-curve PDA for this exact mint.
+     curveAccounts++;observedCurveBalance+=BigInt(raw);continue;
+    }
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    counted=Math.min(eligible.length,10);
