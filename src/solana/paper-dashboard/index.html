@@ -99,6 +99,17 @@ th { color: #94a3b8; }
     </table>
   </div>
 </section>
+<section class="panel" aria-label="Market intelligence research">
+  <h2>Market Intelligence — research only</h2>
+  <p>Receipt-time market observations, not executable quotes or verified Pump.fun transactions. These indicators never initiate trades.</p>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <label for="research-window">Analysis window</label>
+    <select id="research-window"><option value="1">1 minute</option><option value="5" selected>5 minutes</option><option value="15">15 minutes</option></select>
+    <small id="research-status">Waiting for market history...</small>
+  </div>
+  <div class="grid" id="research-metrics" style="margin-top:14px"></div>
+  <small id="research-caveat"></small>
+</section>
 <section class="grid" id="metrics"></section>
 
 <section class="panel">
@@ -250,6 +261,33 @@ function drawEquity(points, startingBalance) {
   svg.appendChild(line);
 }
 
+async function refreshResearch() {
+  const status = byId('research-status');
+  try {
+    const minutes = byId('research-window').value;
+    const response = await fetch('/api/research/momentum?minutes=' + encodeURIComponent(minutes), { cache: 'no-store' });
+    if (!response.ok) throw new Error('Research HTTP ' + response.status);
+    const r = await response.json();
+    const display = value => value == null ? 'N/A' : Number(value).toFixed(3) + '%';
+    byId('research-metrics').replaceChildren(
+      metric('Price change', display(r.priceChangePercent)),
+      metric('Liquidity change', display(r.liquidityChangePercent)),
+      metric('Observed price range', display(r.observedPriceRangePercent)),
+      metric('Largest sample gap', r.maximumObservedGapSeconds == null ? 'N/A' : Number(r.maximumObservedGapSeconds).toFixed(1) + 's'),
+      metric('Window observations', r.observationCount),
+      metric('Data quality', r.status)
+    );
+    status.textContent = r.status === 'READY'
+      ? 'Sampled history available · ' + r.windowMinutes + '-minute window'
+      : 'Insufficient continuous observations for this window';
+    byId('research-caveat').textContent = r.caveat || '';
+  } catch (error) {
+    status.textContent = 'Research unavailable: ' + error.message;
+    byId('research-metrics').replaceChildren();
+  }
+}
+byId('research-window').addEventListener('change', () => { void refreshResearch(); });
+
 async function refresh() {
   try {
     const response = await fetch('/api/performance', { cache: 'no-store' });
@@ -300,7 +338,9 @@ async function refresh() {
 }
 
 void refresh();
+void refreshResearch();
 setInterval(() => { void refresh(); }, 5000);
+setInterval(() => { void refreshResearch(); }, 15000);
 </script>
 </body>
 </html>
