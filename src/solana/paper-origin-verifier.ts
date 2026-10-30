@@ -68,16 +68,41 @@ export async function inspectPumpOrigin(
     return (body as { result?: unknown }).result;
   };
   try {
-    // Fetch only one bounded page. If older history exists, we cannot claim
-    // the earliest transaction is the token's actual creation transaction.
-    const signatures = await request('getSignaturesForAddress', [
-      mint, { limit: 20, commitment: 'finalized' }
-    ]);
-    if (!Array.isArray(signatures) || signatures.length === 0)
-      return unknown('No finalized mint transaction history available');
-    if (signatures.length === 20)
-      return unknown('Mint transaction history exceeds bounded first page; creation not established');
-    const oldest = signatures.at(-1) as { signature?: unknown; err?: unknown };
+    // Walk backwards in bounded pages. Never claim the oldest signature is
+    // creation unless history is exhausted. This limits RPC cost per mint.
+    const pageSize = 100;
+    const maxPages = 5;
+    let before: string | undefined;
+    let oldest: { signature?: unknown; err?: unknown } | undefined;
+    let exhausted = false;
+    const seen = new Set<string>();
+    for (let page = 0; page < maxPages; page++) {
+      const options: { limit: number; commitment: string; before?: string } = {
+        limit: pageSize, commitment: 'finalized'
+      };
+      if (before) options.before = before;
+      const signatures = await request('getSignaturesForAddress', [mint, options]);
+      if (!Array.isArray(signatures))
+        return unknown('Invalid signature history response');
+      if (signatures.length === 0) {
+        exhausted = true;
+        break;
+      }
+      for (const entry of signatures) {
+        if (!entry || typeof entry.signature !== 'string' ||
+            seen.has(entry.signature))
+          return unknown('Invalid or repeated signature history');
+        seen.add(entry.signature);
+      }
+      oldest = signatures.at(-1) as { signature?: unknown; err?: unknown };
+      before = oldest.signature as string;
+      if (signatures.length < pageSize) {
+        exhausted = true;
+        break;
+      }
+    }
+    if (!exhausted)
+      return unknown('Creation history not reached within 500 signatures; deferred');
     if (!oldest || typeof oldest.signature !== 'string' || oldest.err)
       return unknown('Earliest visible transaction cannot establish creation');
     const transaction = await request('getTransaction', [
