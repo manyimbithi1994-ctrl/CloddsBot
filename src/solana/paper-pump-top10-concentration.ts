@@ -33,14 +33,20 @@ async function main():Promise<void>{
     throw Error('INVALID_MINT_SUPPLY');
    if(!Array.isArray(largest.value))throw Error('MISSING_LARGEST_ACCOUNTS');
    const accounts=largest.value.slice(0,20);
-   // One batched read to identify token owners; avoid one request per account.
-   const details=await rpc('getMultipleAccounts',[
-    accounts.map((a:any)=>a.address),{encoding:'jsonParsed',commitment:'finalized'}]);
-   if(!Array.isArray(details.value)||details.value.length!==accounts.length)
-    throw Error('INCOMPLETE_ACCOUNT_DETAILS');
+   // Bound response sizes to avoid HTTP 413 from large jsonParsed batches.
+   // Fail closed if any chunk cannot be inspected; no unbounded retries.
+   const details:any[]=[];
+   for(let start=0;start<accounts.length;start+=4){
+    const chunk=accounts.slice(start,start+4);
+    const response=await rpc('getMultipleAccounts',[
+     chunk.map((a:any)=>a.address),{encoding:'jsonParsed',commitment:'finalized'}]);
+    if(!Array.isArray(response.value)||response.value.length!==chunk.length)
+     throw Error('INCOMPLETE_ACCOUNT_DETAILS');
+    details.push(...response.value);
+   }
    const eligible:Array<{address:string;amount:bigint}>=[];
    for(let i=0;i<accounts.length;i++){
-    const info=details.value[i]?.data?.parsed?.info;
+    const info=details[i]?.data?.parsed?.info;
     const owner=info?.owner;
     const raw=accounts[i]?.amount;
     if(typeof owner!=='string'||typeof raw!=='string'||!/^\d+$/.test(raw))
