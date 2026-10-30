@@ -70,6 +70,10 @@ async function pollMarket(run: number): Promise<void> {
     if (run !== generation || sessionStatus !== 'RUNNING') return;
     const validated = validateSafePaperMarket(observation, previousObservation);
     const classification = classifyMarketSnapshot(validated, previousObservation);
+    if (previousObservation && classification === 'UNCHANGED' &&
+        Date.parse(validated.observedAt) - Date.parse(previousObservation.observedAt) >= 60_000) {
+      throw new Error('Quote unchanged after a long observation gap; simulation halted');
+    }
     const freshness = evaluateMarketFreshness(classification, freshnessState, Date.parse(validated.observedAt));
     previousObservation = validated;
     freshnessState = freshness.state;
