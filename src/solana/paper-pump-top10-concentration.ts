@@ -22,7 +22,9 @@ async function main():Promise<void>{
   const curve=PublicKey.findProgramAddressSync(
    [Buffer.from('bonding-curve'),new PublicKey(mint).toBuffer()],pump)[0].toBase58();
   let status='UNKNOWN',reason='INCOMPLETE_DATA',percent:number|null=null;
-  let counted=0,curveAccounts=0;\n  let outsideCurvePercent:number|null=null,curveSharePercent:number|null=null;\n  let outsideCurveStatus='UNKNOWN';
+  let counted=0,curveAccounts=0;
+  let outsideCurvePercent:number|null=null,curveSharePercent:number|null=null;
+  let outsideCurveStatus='UNKNOWN';
   try{
    const [mintAccount,largest]=await Promise.all([
     rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]),
@@ -44,7 +46,8 @@ async function main():Promise<void>{
      throw Error('INCOMPLETE_ACCOUNT_DETAILS');
     details.push(...response.value);
    }
-   const eligible:Array<{address:string;amount:bigint}>=[];\n   let observedCurveBalance=0n;
+   const eligible:Array<{address:string;amount:bigint}>=[];
+   let observedCurveBalance=0n;
    for(let i=0;i<accounts.length;i++){
     const info=details[i]?.data?.parsed?.info;
     const owner=info?.owner;
@@ -60,12 +63,22 @@ async function main():Promise<void>{
    const total=eligible.slice(0,10).reduce((s,a)=>s+a.amount,0n);
    const supply=BigInt(supplyRaw);
    percent=Number(total*10000n/supply)/100;
-   if(observedCurveBalance>0n&&observedCurveBalance<supply){\n    const outsideSupply=supply-observedCurveBalance;\n    outsideCurvePercent=Number(total*10000n/outsideSupply)/100;\n    curveSharePercent=Number(observedCurveBalance*10000n/supply)/100;\n    outsideCurveStatus=outsideCurvePercent>40?'HIGH_OUTSIDE_CURVE_CONCENTRATION_WARNING':'BELOW_OUTSIDE_CURVE_WARNING_THRESHOLD';\n   }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';}\n   else{outsideCurveStatus='CURVE_CUSTODY_NOT_OBSERVED';}\n   status=percent>40?'HIGH_CONCENTRATION_RISK':'PASS_PRELIMINARY';
+   if(observedCurveBalance>0n&&observedCurveBalance<supply){
+    const outsideSupply=supply-observedCurveBalance;
+    outsideCurvePercent=Number(total*10000n/outsideSupply)/100;
+    curveSharePercent=Number(observedCurveBalance*10000n/supply)/100;
+    outsideCurveStatus=outsideCurvePercent>40?'HIGH_OUTSIDE_CURVE_CONCENTRATION_WARNING':'BELOW_OUTSIDE_CURVE_WARNING_THRESHOLD';
+   }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';}
+   else{outsideCurveStatus='CURVE_CUSTODY_NOT_OBSERVED';}
+   status=percent>40?'HIGH_CONCENTRATION_RISK':'PASS_PRELIMINARY';
    reason=percent>40?'TOP_TEN_NON_CURVE_ACCOUNTS_OVER_40_PERCENT':
     'TOP_TEN_NON_CURVE_ACCOUNTS_AT_OR_BELOW_40_PERCENT';
   }catch(e){status='UNKNOWN';reason=e instanceof Error?e.message:String(e);}
   console.log(JSON.stringify({mint,status,reason,topTenNonCurveSharePercent:percent,
-   topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,\n   observedCurveSharePercent:curveSharePercent,outsideCurveStatus,\n   outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',\n   nonCurveAccountsCounted:counted,excludedCurveAccounts:curveAccounts,
+   topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
+   observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
+   outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
+   nonCurveAccountsCounted:counted,excludedCurveAccounts:curveAccounts,
    denominator:'TOTAL_MINT_SUPPLY',thresholdPercent:40,
    distinctBeneficialOwnersVerified:false,token2022ExtensionsVerified:false,
    automatedTradingEligible:false}));
