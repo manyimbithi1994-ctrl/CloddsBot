@@ -209,9 +209,11 @@ byId('discover').addEventListener('click', async () => {
       tbody.appendChild(row);
     }
     status.textContent = data.candidates.length +
-      ' Solana profiles checked · Pump.fun origin unverified · No trades';
+      ' Solana profiles checked · ' + (data.cacheStatus || 'UNKNOWN') +
+      ' data · Pump.fun origin unverified · No trades' +
+      (data.warning ? ' · ' + data.warning : '');
   } catch (error) {
-    status.textContent = 'Error: ' + error.message;
+    status.textContent = 'Error: ' + error.message + ' · No new results loaded';
   } finally {
     button.disabled = false;
   }
