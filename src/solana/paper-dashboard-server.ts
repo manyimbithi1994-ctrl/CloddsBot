@@ -233,13 +233,33 @@ const server = createServer(async (req, res) => {
           sendJson(409, { error: 'Select a Solana token mint before starting' });
           return;
         }
-        if (readMarketJournal(journalPath).length > 0) {
-          sendJson(409, { error: 'Start a new session for a new market run' });
-          return;
+        // Resume only from a complete, validated journal tail. No network
+        // request or simulated order is made during this restoration.
+        const history = readMarketJournal(journalPath);
+        const last = history.at(-1);
+        let restoredObservation: PaperMarketObservation | null = null;
+        let restoredFreshness: MarketFreshnessState | null = null;
+        if (last) {
+          if (last.tokenMint !== tokenMint || last.source === undefined ||
+              last.liquidityUsd === undefined) {
+            sendJson(409, { error: 'Session journal cannot be safely resumed' });
+            return;
+          }
+          restoredObservation = validateSafePaperMarket({
+            source: last.source,
+            tokenMint: last.tokenMint,
+            pairAddress: last.pairAddress,
+            liquidityUsd: last.liquidityUsd,
+            priceUsd: last.priceUsd,
+            observedAt: last.observedAt
+          }, null, Date.parse(last.observedAt));
+          // A restarted process cannot prove whether an unchanged quote was
+          // fresh during downtime. Fail closed on the first unchanged quote.
+          restoredFreshness = { lastChangedAt: last.observedAt };
         }
         lastError = null;
-        previousObservation = null;
-        freshnessState = null;
+        previousObservation = restoredObservation;
+        freshnessState = restoredFreshness;
         sessionStatus = 'RUNNING';
         generation += 1;
         void pollMarket(generation);
@@ -262,7 +282,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method !== 'GET') { res.writeHead(405); res.end('Method not allowed'); return; }
     if (url.pathname === '/api/session') {
-      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError, sessionDirectory, resumeRequiresNewSession: readMarketJournal(journalPath).length > 0 });
+      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError, sessionDirectory, resumeRequiresNewSession: false, resumeRequiresFreshQuote: readMarketJournal(journalPath).length > 0 });
       return;
     }
 
