@@ -9,6 +9,7 @@ import { analyzePaperPerformance } from './paper-performance';
 import { analyzePaperMomentum } from './paper-momentum-research';
 import { assessResearchCandidate } from './paper-candidate-research';
 import { readTokenResearchSummaries } from './paper-research-summary';
+import { evaluateResearchPipeline } from './paper-research-pipeline';
 import { createPaperTestConfig } from './paper-test-config';
 import { fetchPaperTokenPrice } from './paper-price-feed';
 import { discoverSolanaCandidates } from './paper-token-discovery';
@@ -164,6 +165,23 @@ const server = createServer(async (req, res) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
+
+    if (req.method === 'GET' && url.pathname === '/api/research/pipeline') {
+      if (!discoveryCache) {
+        sendJson(200, { mode: 'RESEARCH_ONLY', status: 'DISCOVERY_REQUIRED',
+          assessments: [], automatedTradingEnabled: false });
+        return;
+      }
+      const history = readTokenResearchSummaries();
+      const byMint = new Map(history.map(item => [item.mint, item]));
+      // No verified origin or safety evidence is available yet. Never
+      // promote a suffix hint, a listing, or a market score to verification.
+      const assessments = discoveryCache.candidates.map(candidate =>
+        evaluateResearchPipeline(candidate, null, null, byMint.get(candidate.mint) ?? null));
+      sendJson(200, { mode: 'RESEARCH_ONLY', status: 'ORIGIN_VERIFICATION_REQUIRED',
+        assessments, automatedTradingEnabled: false });
+      return;
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/research/watchlist') {
       const tokens = readTokenResearchSummaries();
