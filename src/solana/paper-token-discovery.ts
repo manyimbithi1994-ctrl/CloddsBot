@@ -12,6 +12,8 @@ export interface DiscoveryCandidate {
   buys24h: number | null;
   sells24h: number | null;
   pairAddress: string | null;
+  pairCreatedAt: string | null;
+  volumeLiquidityRatio: number | null;
   score: number;
   eligible: boolean;
   reasons: string[];
@@ -50,7 +52,21 @@ export function screenDiscoveryCandidate(
   if (candidate.buys24h === null || candidate.sells24h === null)
     reasons.push('Buy/sell activity unavailable');
   if (!candidate.pairAddress)
-    reasons.push('No verified Solana pair');
+    reasons.push('No Solana pair available');
+  if (candidate.sells24h === 0)
+    reasons.push('No recorded sells in 24 hours');
+  if (candidate.buys24h !== null && candidate.sells24h !== null &&
+      candidate.buys24h + candidate.sells24h < 100)
+    reasons.push('Fewer than 100 transactions in 24 hours');
+  if (candidate.volumeLiquidityRatio !== null && candidate.volumeLiquidityRatio > 20)
+    reasons.push('24-hour volume exceeds liquidity by more than 20x');
+  if (candidate.pairCreatedAt === null)
+    reasons.push('Pair creation time unavailable');
+  else {
+    const ageMs = Date.now() - Date.parse(candidate.pairCreatedAt);
+    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs < 5 * 60_000)
+      reasons.push('Pair age under five minutes or invalid');
+  }
   // Ranking is descriptive only; not an investment recommendation.
   const score = Math.round(
     Math.min(40, Math.log10(1 + (candidate.liquidityUsd ?? 0)) * 8) +
@@ -107,6 +123,14 @@ export async function discoverSolanaCandidates(): Promise<{
       buys24h: positive(txns?.buys),
       sells24h: positive(txns?.sells),
       pairAddress: typeof pair?.pairAddress === 'string' ? pair.pairAddress : null,
+      pairCreatedAt: typeof pair?.pairCreatedAt === 'number' &&
+        Number.isFinite(pair.pairCreatedAt) && pair.pairCreatedAt > 0
+        ? new Date(pair.pairCreatedAt).toISOString() : null,
+      volumeLiquidityRatio: positive(obj(pair?.liquidity)?.usd) !== null &&
+        positive(obj(pair?.liquidity)?.usd)! > 0 &&
+        positive(obj(pair?.volume)?.h24) !== null
+        ? positive(obj(pair?.volume)?.h24)! / positive(obj(pair?.liquidity)?.usd)!
+        : null,
       provenance: 'UNVERIFIED'
     });
     candidates.push(candidate);
