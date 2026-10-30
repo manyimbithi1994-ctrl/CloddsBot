@@ -99,6 +99,12 @@ const sessionsRoot = resolve('.paper-sessions');
 const host = '127.0.0.1';
 const port = 4173;
 
+// Keep manual discovery bounded; never fan out concurrent provider requests.
+let discoveryCache: Awaited<ReturnType<typeof discoverSolanaCandidates>> | null = null;
+let discoveryCacheAt = 0;
+let discoveryPending: Promise<Awaited<ReturnType<typeof discoverSolanaCandidates>>> | null = null;
+const discoveryCacheMs = 60_000;
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? '/', `http://${host}:${port}`);
@@ -216,8 +222,31 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/api/discovery') {
       // Explicit GET only. No automatic polling or trading from discovery.
-      const result = await discoverSolanaCandidates();
-      sendJson(200, result);
+      const now = Date.now();
+      if (discoveryCache && now - discoveryCacheAt < discoveryCacheMs) {
+        sendJson(200, { ...discoveryCache, cacheStatus: 'CACHED' });
+        return;
+      }
+      if (!discoveryPending) {
+        discoveryPending = discoverSolanaCandidates()
+          .then(result => {
+            discoveryCache = result;
+            discoveryCacheAt = Date.now();
+            return result;
+          })
+          .finally(() => { discoveryPending = null; });
+      }
+      try {
+        const result = await discoveryPending;
+        sendJson(200, { ...result, cacheStatus: 'LIVE' });
+      } catch (error) {
+        console.error('Discovery provider error:', error);
+        if (discoveryCache) {
+          sendJson(200, { ...discoveryCache, cacheStatus: 'STALE', warning: 'Provider unavailable; showing older research data' });
+        } else {
+          sendJson(503, { error: 'Discovery provider unavailable; try again later' });
+        }
+      }
       return;
     }
 
