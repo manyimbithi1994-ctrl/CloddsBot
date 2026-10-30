@@ -6,6 +6,7 @@ import { openPaperTestSession } from './paper-test-session';
 
 import { readMarketJournal } from './paper-market-journal';
 import { analyzePaperPerformance } from './paper-performance';
+import { analyzePaperMomentum } from './paper-momentum-research';
 import { createPaperTestConfig } from './paper-test-config';
 import { fetchPaperTokenPrice } from './paper-price-feed';
 import { discoverSolanaCandidates } from './paper-token-discovery';
@@ -161,6 +162,17 @@ const server = createServer(async (req, res) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
+
+    if (req.method === 'GET' && url.pathname === '/api/research/momentum') {
+      const windowRaw = url.searchParams.get('minutes');
+      const minutes = windowRaw === null ? 5 : Number(windowRaw);
+      if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
+        sendJson(400, { error: 'Invalid research window (minutes)' });
+        return;
+      }
+      sendJson(200, analyzePaperMomentum(readMarketJournal(journalPath), minutes));
+      return;
+    }
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/session/')) {
       // Codespaces forwards HTTPS browser requests to the local HTTP listener.
