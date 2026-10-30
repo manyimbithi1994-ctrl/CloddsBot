@@ -71,7 +71,7 @@ export async function inspectPumpOrigin(
     // Walk backwards in bounded pages. Never claim the oldest signature is
     // creation unless history is exhausted. This limits RPC cost per mint.
     const pageSize = 100;
-    const maxPages = 5;
+    const maxPages = 1;
     let before: string | undefined;
     let oldest: { signature?: unknown; err?: unknown } | undefined;
     let exhausted = false;
@@ -102,7 +102,7 @@ export async function inspectPumpOrigin(
       }
     }
     if (!exhausted)
-      return unknown('Creation history not reached within 500 signatures; deferred');
+      return unknown('Active mint has at least 100 signatures; defer to indexed creation evidence instead of expensive history crawling');
     if (!oldest || typeof oldest.signature !== 'string' || oldest.err)
       return unknown('Earliest visible transaction cannot establish creation');
     const transaction = await request('getTransaction', [
