@@ -108,9 +108,22 @@ const server = createServer(async (req, res) => {
     };
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/session/')) {
+      // Codespaces forwards HTTPS browser requests to the local HTTP listener.
+      // Compare origin hosts rather than assuming the browser uses HTTP.
       const origin = req.headers.origin;
-      const expectedOrigin = `http://${req.headers.host}`;
-      if (!origin || origin !== expectedOrigin || !req.headers.host || req.headers['sec-fetch-site'] === 'cross-site') {
+      let originHost: string | null = null;
+      try {
+        if (origin) {
+          const parsed = new URL(origin);
+          if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            originHost = parsed.host;
+          }
+        }
+      } catch { /* Invalid Origin is rejected below. */ }
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const proxyHost = typeof forwardedHost === 'string' ? forwardedHost : null;
+      const sameHost = !!originHost && (originHost === req.headers.host || originHost === proxyHost);
+      if (!sameHost || req.headers['sec-fetch-site'] === 'cross-site') {
         sendJson(403, { error: 'Same-origin request required' });
         return;
       }
