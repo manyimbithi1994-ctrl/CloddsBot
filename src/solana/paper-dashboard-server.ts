@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
-import { readFileSync, realpathSync, statSync, mkdirSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync, mkdirSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname, sep } from 'node:path';
 import { openPaperTestSession } from './paper-test-session';
 
 import { readMarketJournal } from './paper-market-journal';
@@ -95,6 +95,50 @@ async function pollMarket(run: number): Promise<void> {
   }
 }
 const sessionsRoot = resolve('.paper-sessions');
+const activePointerPath = join(sessionsRoot, 'dashboard-active-session.json');
+const validMint = (value: unknown): value is string =>
+  typeof value === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
+
+function persistSelection() {
+  mkdirSync(sessionsRoot, { recursive: true, mode: 0o700 });
+  const temp = activePointerPath + '.' + randomUUID() + '.tmp';
+  writeFileSync(temp, JSON.stringify({
+    version: 1, sessionDirectory, tokenMint
+  }) + '\\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  renameSync(temp, activePointerPath);
+}
+
+if (existsSync(activePointerPath)) {
+  try {
+    const saved = JSON.parse(readFileSync(activePointerPath, 'utf8'));
+    if (saved.version !== 1 || typeof saved.sessionDirectory !== 'string')
+      throw new Error('Invalid saved session pointer');
+    const restored = realpathSync(saved.sessionDirectory);
+    const root = realpathSync(sessionsRoot);
+    if (!restored.startsWith(root + sep) || dirname(restored) !== root ||
+        !statSync(restored).isDirectory())
+      throw new Error('Saved session outside isolated session root');
+    const restoredConfig = JSON.parse(readFileSync(join(restored, 'paper-session-config.json'), 'utf8'));
+    const restoredBalance = restoredConfig?.config?.startingBalanceUsd;
+    if (restoredConfig.version !== 1 ||
+        JSON.stringify(restoredConfig.config) !== JSON.stringify(createPaperTestConfig(restoredBalance)))
+      throw new Error('Invalid restored paper session');
+    const entries = readMarketJournal(join(restored, 'market-journal.jsonl'));
+    if (saved.tokenMint !== null && !validMint(saved.tokenMint))
+      throw new Error('Invalid saved mint');
+    if (entries.length && (!saved.tokenMint || entries.some(entry => entry.tokenMint !== saved.tokenMint)))
+      throw new Error('Saved mint disagrees with journal');
+    sessionDirectory = restored;
+    configPath = join(restored, 'paper-session-config.json');
+    journalPath = join(restored, 'market-journal.jsonl');
+    config = restoredConfig;
+    startingBalanceUsd = restoredBalance;
+    tokenMint = saved.tokenMint;
+  } catch (error) {
+    throw new Error('Saved dashboard selection invalid; refusing to load another session automatically', { cause: error });
+  }
+}
+
 
 const host = '127.0.0.1';
 const port = 4173;
@@ -169,6 +213,7 @@ const server = createServer(async (req, res) => {
         startingBalanceUsd = requested.startingBalanceUsd;
         observationIntervalSeconds = 15;
         sessionStatus = 'STOPPED';
+        persistSelection();
         sendJson(201, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds });
         return;
       }
@@ -208,6 +253,7 @@ const server = createServer(async (req, res) => {
           sendJson(400, { error: 'Invalid Solana token mint address' }); return;
         }
         tokenMint = payload.tokenMint;
+        persistSelection();
         sendJson(200, { status: sessionStatus, tokenMint, marketPollingActive: false });
         return;
       }
@@ -216,7 +262,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method !== 'GET') { res.writeHead(405); res.end('Method not allowed'); return; }
     if (url.pathname === '/api/session') {
-      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError });
+      sendJson(200, { status: sessionStatus, startingBalanceUsd, observationIntervalSeconds, tokenMint, marketPollingActive: sessionStatus === 'RUNNING', lastError, sessionDirectory, resumeRequiresNewSession: readMarketJournal(journalPath).length > 0 });
       return;
     }
 
