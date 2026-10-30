@@ -26,7 +26,7 @@ export function assessRugcheckReport(report:unknown,mint:string):{status:'BLOCK'
   if(holders.some(h=>!obj(h)||!address(h.address)||!finite(h.pct)||h.pct<0||h.pct>100))
    reasons.push('HOLDER_RECORD_UNVERIFIED');
   else {
-   const ordered=[...holders].sort((a,b)=>(b as Obj).pct as number-((a as Obj).pct as number));
+   const ordered=[...holders].sort((a,b)=>((b as Obj).pct as number)-((a as Obj).pct as number));
    topTenReportedPercent=ordered.slice(0,10).reduce((s,h)=>s+((h as Obj).pct as number),0);
    if(topTenReportedPercent>100.01)reasons.push('HOLDER_TOTAL_INCONSISTENT');
    if(topTenReportedPercent>40)reasons.push('TOP_TEN_REPORTED_OVER_40_PERCENT_UNATTRIBUTED');
