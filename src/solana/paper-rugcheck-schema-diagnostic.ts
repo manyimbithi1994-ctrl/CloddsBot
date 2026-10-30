@@ -23,3 +23,5 @@ async function main():Promise<void>{
   automatedTradingEligible:false},null,2));
 }
 void main().catch(e=>{console.error(e instanceof Error?e.message:String(e));process.exitCode=1;});
+
+export {};
