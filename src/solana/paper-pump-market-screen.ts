@@ -9,6 +9,7 @@ type Verified = { mint: string; signature: string; status: string; programId: st
 type Pair = Record<string, any>;
 const source = resolve('.paper-sessions/pump-verified-creations.jsonl');
 const target = resolve('.paper-sessions/pump-market-screen.jsonl');
+const rugcheckSource = resolve('.paper-sessions/pump-rugcheck-full-review.jsonl');
 const max = Math.min(30, Math.max(1, Number(process.argv[2] || 10)));
 const mints = new Map<string, Verified>();
 for (const line of readFileSync(source, 'utf8').split('\n')) {
@@ -30,7 +31,31 @@ try {
     if (typeof r.mint === 'string') previous.add(r.mint);
   }
 } catch { /* first run */ }
-const selected = [...mints.values()].filter(x => !previous.has(x.mint)).slice(0, max);
+// Only Rugcheck-reviewed mints may reach DexScreener. Missing or malformed
+// research evidence fails closed rather than being treated as a pass.
+const rugcheckApproved = new Set<string>();
+try {
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const line of readFileSync(rugcheckSource, 'utf8').split('\\n')) {
+    if (!line.trim()) continue;
+    try {
+      const record: unknown = JSON.parse(line);
+      if (record && typeof record === 'object' && !Array.isArray(record)) {
+        const r = record as Record<string, unknown>;
+        if (typeof r.mint === 'string') latest.set(r.mint, r);
+      }
+    } catch { /* malformed review is never an approval */ }
+  }
+  for (const [mint, r] of latest) {
+    const checkedAt = typeof r.checkedAt === 'string' ? Date.parse(r.checkedAt) : NaN;
+    if (r.rugcheckStageStatus === 'REVIEW_FOR_DEXSCREENER' &&
+        Array.isArray(r.rugcheckStageReasons) && r.rugcheckStageReasons.length === 0 &&
+        Number.isFinite(checkedAt) && Date.now() - checkedAt >= 0 &&
+        Date.now() - checkedAt <= 300000) rugcheckApproved.add(mint);
+  }
+} catch { /* absent Rugcheck results => no DexScreener candidates */ }
+const selected = [...mints.values()].filter(x =>
+  rugcheckApproved.has(x.mint) && !previous.has(x.mint)).slice(0, max);
 const metric = (x: unknown): number | null =>
   typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null;
 async function main(): Promise<void> {
