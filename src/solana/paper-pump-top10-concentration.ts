@@ -3,12 +3,39 @@
  * when necessary; never claim a pass if fewer than ten are available.
  */
 import {PublicKey} from '@solana/web3.js';
+import {readFileSync} from 'node:fs';
 import {evaluateConcentrationPolicy} from './paper-concentration-policy';
 import {parseMintAccountEvidence} from './paper-quicknode-mint-evidence';
 import {assessQuickNodeEvidence} from './paper-quicknode-evidence';
 const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
-const mints=['3msFLe2RXjfC6wHkkGjvXFFjfMf7Fvmc42HeaEBmpump','Hq76LjXyS9eJeTXHqkMEjDAdMuzQ41K14Lx35yKQ5Y1b'];
+const mintPattern=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function loadCandidates():string[]{
+ const verified=new Set<string>();
+ for(const line of readFileSync('.paper-sessions/pump-verified-creations.jsonl','utf8').split('\\n')){
+  if(!line.trim())continue;
+  try{const r=JSON.parse(line);
+   if(r.status==='VERIFIED_PUMP_FUN' &&
+      r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' &&
+      typeof r.mint==='string'&&mintPattern.test(r.mint)&&
+      typeof r.signature==='string'&&r.signature.length>0)verified.add(r.mint);
+  }catch{/* invalid creation is never eligible */}
+ }
+ const latest=new Map<string,any>();
+ for(const line of readFileSync('.paper-sessions/pump-market-screen.jsonl','utf8').split('\\n')){
+  if(!line.trim())continue;
+  try{const r=JSON.parse(line);
+   if(typeof r.mint==='string')latest.set(r.mint,r);
+  }catch{/* invalid market evidence is never eligible */}
+ }
+ return [...latest].filter(([mint,r])=>verified.has(mint)&&
+  r.origin==='VERIFIED_PUMP_FUN'&&r.source==='DEXSCREENER_BATCH'&&
+  r.marketScreenPassed===true&&Array.isArray(r.reasons)&&r.reasons.length===0&&
+  typeof r.checkedAt==='string'&&Number.isFinite(Date.parse(r.checkedAt))&&
+  Date.now()>=Date.parse(r.checkedAt)&&Date.now()-Date.parse(r.checkedAt)<=300000)
+  .slice(0,10).map(([mint])=>mint);
+}
+const mints=loadCandidates();
 const pump=new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 let rpcRequests=0;
 async function rpc(method:string,params:unknown[]):Promise<any>{
@@ -21,6 +48,7 @@ async function rpc(method:string,params:unknown[]):Promise<any>{
  return data.result;
 }
 async function main():Promise<void>{
+ if(!mints.length){console.log(JSON.stringify({mode:'READ_ONLY',screened:0,rpcRequests:0,reason:'NO_FRESH_VERIFIED_MARKET_CANDIDATES',approvedForTrading:0}));return;}
  for(const mint of mints){
   const curve=PublicKey.findProgramAddressSync(
    [Buffer.from('bonding-curve'),new PublicKey(mint).toBuffer()],pump)[0].toBase58();
