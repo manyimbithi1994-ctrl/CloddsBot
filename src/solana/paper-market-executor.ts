@@ -34,13 +34,16 @@ export function executePaperMarketDecision(
 
   try {
     if (decision.action === 'BUY') {
-      engine.buy(decision.spendUsd, decision.priceUsd, 100);
-
+      // Mandatory entry interlock: no trusted, fresh, cross-provider safety
+      // certificate is issued by the research pipeline yet. Fail closed.
+      // Existing virtual exits remain possible through the SELL branch.
       return {
-        action: 'BUY',
-        entryPriceUsd: decision.priceUsd,
+        action: 'BLOCK',
+        reason: 'SAFETY_CERTIFICATE_NOT_IMPLEMENTED',
+        entryPriceUsd,
         account: engine.snapshot()
       };
+
     }
 
     engine.sell(decision.quantity, decision.priceUsd, 100);
