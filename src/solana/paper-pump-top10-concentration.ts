@@ -43,6 +43,7 @@ function loadCandidates():string[]{
 const mints=loadCandidates();
 const pump=new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 const tokenProgram=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const token2022Program=new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const associatedProgram=new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 let rpcRequests=0;
 const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
@@ -101,6 +102,9 @@ async function main():Promise<void>{
   try{
    const mintAccount=await rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]);
    const largest=await rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}]);
+   const mintTokenProgram=mintAccount.value?.owner;
+   if(mintTokenProgram!==tokenProgram.toBase58()&&mintTokenProgram!==token2022Program.toBase58())
+    throw Error('UNSUPPORTED_MINT_TOKEN_PROGRAM');
    mintAccountResponse=mintAccount;
    checkedAt=new Date().toISOString();
    const curveAccount=await rpc('getAccountInfo',[curve,{encoding:'base64',commitment:'finalized'}]);
@@ -110,13 +114,13 @@ async function main():Promise<void>{
     typeof curveAccount.value.data[0]==='string'&&curveAccount.value.data[0].length>0;
    const canonicalCurveAta=PublicKey.findProgramAddressSync([
     new PublicKey(curve).toBuffer(),
-    tokenProgram.toBuffer(),new PublicKey(mint).toBuffer()
+    new PublicKey(mintTokenProgram).toBuffer(),new PublicKey(mint).toBuffer()
    ],associatedProgram)[0].toBase58();
    curveCustodyEvidence=curveAccountProgramOwned?'CURVE_PDA_PROGRAM_OWNER_CONFIRMED':'CURVE_PDA_NOT_PROGRAM_OWNED';
    const canonicalAccount=await rpc('getAccountInfo',[canonicalCurveAta,{encoding:'jsonParsed',commitment:'finalized'}]);
    const canonicalInfo=canonicalAccount.value?.data?.parsed?.info;
    canonicalCurveAtaExists=canonicalAccount.value!==null;
-   if(canonicalCurveAtaExists&&canonicalAccount.value?.owner===tokenProgram.toBase58()&&
+   if(canonicalCurveAtaExists&&canonicalAccount.value?.owner===mintTokenProgram&&
       canonicalInfo?.mint===mint&&canonicalInfo?.owner===curve&&
       typeof canonicalInfo?.tokenAmount?.amount==='string'&&
       /^\d+$/.test(canonicalInfo.tokenAmount.amount))
@@ -126,7 +130,7 @@ async function main():Promise<void>{
    for(const entry of owned.value){
     const info=entry?.account?.data?.parsed?.info;
     const amount=info?.tokenAmount?.amount;
-    if(entry?.account?.owner!==tokenProgram.toBase58()||info?.mint!==mint||
+    if(entry?.account?.owner!==mintTokenProgram||info?.mint!==mint||
        info?.owner!==curve||typeof amount!=='string'||!/^\d+$/.test(amount)||
        typeof entry.pubkey!=='string')throw Error('INVALID_CURVE_OWNED_TOKEN_ACCOUNT');
     curveOwnedTokenAccounts.push({address:entry.pubkey,amountRaw:amount});
@@ -171,7 +175,7 @@ async function main():Promise<void>{
        accountProgram!=='TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
      throw Error('UNEXPECTED_TOKEN_ACCOUNT_PROGRAM');
     if(owner===curve){
-     if(accounts[i].address===canonicalCurveAta&&accountProgram===tokenProgram.toBase58())
+     if(accounts[i].address===canonicalCurveAta&&accountProgram===mintTokenProgram)
       canonicalCurveAtaObserved=true;
      // Custody is not excluded unless the account is demonstrably controlled
      // by the expected bonding-curve PDA for this exact mint.
