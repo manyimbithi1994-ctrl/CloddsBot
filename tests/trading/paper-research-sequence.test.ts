@@ -12,5 +12,9 @@ describe('research sequence', () => {
   it('requires both reviews before QuickNode', () => assert.equal(nextPaperResearchStage(rug,dex),'QUICKNODE'));
   it('stops on Rugcheck rejection', () => assert.equal(nextPaperResearchStage({...rug,status:'REJECT_RISK'},dex),'STOP'));
   it('stops on DexScreener rejection', () => assert.equal(nextPaperResearchStage(rug,{...dex,status:'REJECT_UNVERIFIED'}),'STOP'));
+  it('stops when upstream evidence contains contradictory reasons', () => assert.equal(nextPaperResearchStage({...rug,reasons:['UNVERIFIED']},dex),'STOP'));
+  it('stops on forged stage labels', () => assert.equal(nextPaperResearchStage({...rug,stage:'OTHER' as any},dex),'STOP'));
+  it('stops on inconsistent entry eligibility', () => assert.equal(nextPaperResearchStage(rug,{...dex,paperEntryEligible:true as any}),'STOP'));
+  it('stops on malformed pair addresses', () => assert.equal(nextPaperResearchStage(rug,{...dex,pairAddress:'not-a-solana-address'}),'STOP'));
   it('stops without pair identity', () => assert.equal(nextPaperResearchStage(rug,{...dex,pairAddress:null}),'STOP'));
 });
