@@ -27,4 +27,4 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: '1'
       - name: Run paper research unit tests
         run: |
-          node --test --import tsx tests/trading/paper-research-certificate.test.ts tests/trading/paper-rugcheck-stage.test.ts tests/trading/paper-dexscreener-stage.test.ts tests/trading/paper-research-sequence.test.ts tests/trading/pumpfun-paper-risk.test.ts tests/trading/pumpfun-paper-engine.test.ts
+          node --test --import tsx tests/trading/paper-research-certificate.test.ts tests/trading/paper-rugcheck-stage.test.ts tests/trading/paper-dexscreener-stage.test.ts tests/trading/paper-research-sequence.test.ts tests/trading/paper-quicknode-stage.test.ts tests/trading/paper-quicknode-mint-evidence.test.ts tests/trading/paper-quicknode-evidence.test.ts tests/trading/pumpfun-paper-risk.test.ts tests/trading/pumpfun-paper-engine.test.ts
