@@ -5,6 +5,7 @@
 import {PublicKey} from '@solana/web3.js';
 import {evaluateConcentrationPolicy} from './paper-concentration-policy';
 import {parseMintAccountEvidence} from './paper-quicknode-mint-evidence';
+import {assessQuickNodeEvidence} from './paper-quicknode-evidence';
 const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
 const mints=['3msFLe2RXjfC6wHkkGjvXFFjfMf7Fvmc42HeaEBmpump','Hq76LjXyS9eJeTXHqkMEjDAdMuzQ41K14Lx35yKQ5Y1b'];
@@ -30,11 +31,15 @@ async function main():Promise<void>{
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
   let mintEvidenceReasons:string[]=['MINT_ACCOUNT_NOT_FETCHED'];
+  let mintAccountResponse:unknown=null;
+  let checkedAt=new Date().toISOString();
   try{
    const [mintAccount,largest]=await Promise.all([
     rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]),
     rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}])
    ]);
+   mintAccountResponse=mintAccount;
+   checkedAt=new Date().toISOString();
    const mintEvidence=parseMintAccountEvidence(mint,mintAccount);
    mintAuthority=mintEvidence.mintAuthority;
    freezeAuthority=mintEvidence.freezeAuthority;
@@ -80,6 +85,7 @@ async function main():Promise<void>{
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    counted=Math.min(eligible.length,10);
+   if(eligible.length<10) throw Error('TOP_TEN_NON_CURVE_ACCOUNTS_NOT_VERIFIED');
    if(eligible.length<10&&accounts.length===20)
     throw Error('TOP_TEN_NON_CURVE_ACCOUNTS_NOT_COVERED');
    const total=eligible.slice(0,10).reduce((s,a)=>s+a.amount,0n);
@@ -102,7 +108,11 @@ async function main():Promise<void>{
    excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted,
    distinctBeneficialOwnersVerified:false
   });
-  console.log(JSON.stringify({mint,status,reason,policyVerdict,topTenNonCurveSharePercent:percent,
+  const quickNodeVerdict=assessQuickNodeEvidence({mint,mintAccountResponse,checkedAt,
+   nowMs:Date.now(),curveCustodyVerified:false,
+   topTenNonCurveSharePercent:percent,topTenOutsideCurvePercent:outsideCurvePercent,
+   excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted});
+  console.log(JSON.stringify({mint,status,reason,policyVerdict,quickNodeVerdict,topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
    outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
