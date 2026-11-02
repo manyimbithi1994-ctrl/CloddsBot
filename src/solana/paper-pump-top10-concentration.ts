@@ -98,9 +98,9 @@ async function main():Promise<void>{
     outsideCurveStatus=outsideCurvePercent>40?'HIGH_OUTSIDE_CURVE_CONCENTRATION_WARNING':'BELOW_OUTSIDE_CURVE_WARNING_THRESHOLD';
    }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';}
    else{outsideCurveStatus='CURVE_CUSTODY_NOT_OBSERVED';}
-   status=percent>40?'HIGH_CONCENTRATION_RISK':'PASS_PRELIMINARY';
+   status=percent>40?'HIGH_CONCENTRATION_RISK':'INCOMPLETE_VERIFICATION';
    reason=percent>40?'TOP_TEN_NON_CURVE_ACCOUNTS_OVER_40_PERCENT':
-    'TOP_TEN_NON_CURVE_ACCOUNTS_AT_OR_BELOW_40_PERCENT';
+    'TOTAL_SUPPLY_METRIC_ONLY_OUTSIDE_CURVE_UNVERIFIED';
   }catch(e){status='UNKNOWN';reason=e instanceof Error?e.message:String(e);}
   const policyVerdict=evaluateConcentrationPolicy({
    topTenNonCurveSharePercent:percent,
