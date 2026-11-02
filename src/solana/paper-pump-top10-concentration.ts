@@ -113,6 +113,7 @@ async function main():Promise<void>{
   let reserveReconciliation='NOT_CHECKED';
   let reserveVaultExcessRaw:string|null=null;
   let reserveAccountingStatus='UNVERIFIED';
+  let curveInitialSupplyMinusMintSupplyRaw:string|null=null;
   let nonCurvePositiveBalanceAccounts=0;
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
@@ -212,9 +213,12 @@ async function main():Promise<void>{
     const vault=curveOwnedTokenAccounts.reduce((sum,account)=>sum+BigInt(account.amountRaw),0n);
     reserveVaultExcessRaw=(vault-real).toString();
     const curveSupply=BigInt(bondingCurveState.tokenTotalSupplyRaw);
-    reserveAccountingStatus=curveSupply===BigInt(supplyRaw)&&vault>=real?
-     'SUPPLY_CONSISTENT_RESERVE_DIFFERENCE_UNEXPLAINED':
-     'CURVE_SUPPLY_OR_RESERVES_INCONSISTENT';
+    const currentMintSupply=BigInt(supplyRaw);
+    curveInitialSupplyMinusMintSupplyRaw=(curveSupply-currentMintSupply).toString();
+    reserveAccountingStatus=vault<real?'REAL_RESERVES_EXCEED_OBSERVED_VAULT':
+     curveSupply<currentMintSupply?'CURRENT_MINT_SUPPLY_EXCEEDS_CURVE_RECORDED_TOTAL':
+     curveSupply===currentMintSupply?'CURRENT_AND_CURVE_SUPPLY_EQUAL_RESERVE_DIFFERENCE_UNEXPLAINED':
+     'CURVE_RECORDED_TOTAL_EXCEEDS_CURRENT_MINT_SUPPLY_BURN_UNVERIFIED';
     reserveReconciliation=vault===real?'REAL_RESERVES_EQUAL_VAULT':
      vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNEXPLAINED':
      'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNEXPLAINED';
@@ -259,6 +263,7 @@ async function main():Promise<void>{
    curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
    canonicalCurveAtaBalanceRaw,curveOwnedTokenAccounts,curveCustodyEvidence,
    bondingCurveState,reserveReconciliation,reserveVaultExcessRaw,reserveAccountingStatus,
+   curveInitialSupplyMinusMintSupplyRaw,
    nonCurvePositiveBalanceAccounts,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
