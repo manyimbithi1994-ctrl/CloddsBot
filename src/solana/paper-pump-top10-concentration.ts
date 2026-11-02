@@ -112,6 +112,8 @@ async function main():Promise<void>{
   let bondingCurveState:ReturnType<typeof inspectCurveState>|null=null;
   let reserveReconciliation='NOT_CHECKED';
   let reserveVaultExcessRaw:string|null=null;
+  let reserveAccountingStatus='UNVERIFIED';
+  let nonCurvePositiveBalanceAccounts=0;
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
@@ -201,6 +203,7 @@ async function main():Promise<void>{
      // by the expected bonding-curve PDA for this exact mint.
      curveAccounts++;observedCurveBalance+=BigInt(raw);continue;
     }
+    if(BigInt(raw)>0n)nonCurvePositiveBalanceAccounts++;
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    observedCurveBalanceRaw=observedCurveBalance.toString();
@@ -208,6 +211,10 @@ async function main():Promise<void>{
     const real=BigInt(bondingCurveState.realTokenReservesRaw);
     const vault=curveOwnedTokenAccounts.reduce((sum,account)=>sum+BigInt(account.amountRaw),0n);
     reserveVaultExcessRaw=(vault-real).toString();
+    const curveSupply=BigInt(bondingCurveState.tokenTotalSupplyRaw);
+    reserveAccountingStatus=curveSupply===BigInt(supplyRaw)&&vault>=real?
+     'SUPPLY_CONSISTENT_RESERVE_DIFFERENCE_UNEXPLAINED':
+     'CURVE_SUPPLY_OR_RESERVES_INCONSISTENT';
     reserveReconciliation=vault===real?'REAL_RESERVES_EQUAL_VAULT':
      vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNEXPLAINED':
      'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNEXPLAINED';
@@ -251,7 +258,8 @@ async function main():Promise<void>{
    mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,
    curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
    canonicalCurveAtaBalanceRaw,curveOwnedTokenAccounts,curveCustodyEvidence,
-   bondingCurveState,reserveReconciliation,reserveVaultExcessRaw,
+   bondingCurveState,reserveReconciliation,reserveVaultExcessRaw,reserveAccountingStatus,
+   nonCurvePositiveBalanceAccounts,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
