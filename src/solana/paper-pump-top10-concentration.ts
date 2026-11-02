@@ -111,6 +111,7 @@ async function main():Promise<void>{
   let curveCustodyEvidence='NOT_CHECKED';
   let bondingCurveState:ReturnType<typeof inspectCurveState>|null=null;
   let reserveReconciliation='NOT_CHECKED';
+  let reserveVaultExcessRaw:string|null=null;
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
@@ -206,7 +207,10 @@ async function main():Promise<void>{
    if(bondingCurveState){
     const real=BigInt(bondingCurveState.realTokenReservesRaw);
     const vault=curveOwnedTokenAccounts.reduce((sum,account)=>sum+BigInt(account.amountRaw),0n);
-    reserveReconciliation=vault===real?'MATCH':'MISMATCH_REAL_RESERVES_VS_VAULT_BALANCE';
+    reserveVaultExcessRaw=(vault-real).toString();
+    reserveReconciliation=vault===real?'REAL_RESERVES_EQUAL_VAULT':
+     vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNEXPLAINED':
+     'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNEXPLAINED';
    }
    curveCustodyEvidence=curveAccountProgramOwned&&curveOwnedTokenAccounts.length>0?
     'CURVE_PDA_AND_OWNED_TOKEN_ACCOUNTS_OBSERVED':
@@ -247,7 +251,7 @@ async function main():Promise<void>{
    mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,
    curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
    canonicalCurveAtaBalanceRaw,curveOwnedTokenAccounts,curveCustodyEvidence,
-   bondingCurveState,reserveReconciliation,
+   bondingCurveState,reserveReconciliation,reserveVaultExcessRaw,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
