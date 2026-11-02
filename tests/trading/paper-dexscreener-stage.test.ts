@@ -25,6 +25,15 @@ describe('DexScreener research stage', () => {
   it('rejects low liquidity', () => {
     assert.equal(check({...pair,liquidity:{usd:100}}).status,'REJECT_RISK');
   });
+  it('rejects fractional transaction counts', () => {
+    assert.equal(check({...pair,txns:{h24:{buys:90.5,sells:30}}}).status,'REJECT_UNVERIFIED');
+  });
+  it('rejects fractional creation timestamps', () => {
+    assert.equal(check({...pair,pairCreatedAt:now-600000.5}).status,'REJECT_UNVERIFIED');
+  });
+  it('rejects zero liquidity as risky', () => {
+    assert.equal(check({...pair,liquidity:{usd:0}}).status,'REJECT_RISK');
+  });
   it('rejects stale market evidence', () => {
     assert.equal(check(pair,new Date(now-60000).toISOString()).status,'REJECT_UNVERIFIED');
   });
