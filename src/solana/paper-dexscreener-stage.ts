@@ -39,7 +39,8 @@ export function assessDexScreenerStage(input: DexStageInput): DexStageResult {
   const sells = obj(transactions) ? metric(transactions.sells) : null;
   const created = obj(p) ? metric(p.pairCreatedAt) : null;
   if (liquidity === null || volume === null || buys === null || sells === null ||
-      created === null || created > input.nowMs)
+      !Number.isInteger(buys) || !Number.isInteger(sells) ||
+      created === null || !Number.isInteger(created) || created > input.nowMs)
     missing.push('DEX_MARKET_METRICS_UNVERIFIED');
   else {
     if (liquidity < 10000) risk.push('DEX_LOW_LIQUIDITY');
