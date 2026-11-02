@@ -42,6 +42,8 @@ function loadCandidates():string[]{
 }
 const mints=loadCandidates();
 const pump=new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+const tokenProgram=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const associatedProgram=new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 let rpcRequests=0;
 const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 let lastRpcAt=0;
@@ -86,6 +88,8 @@ async function main():Promise<void>{
   let outsideCurvePercent:number|null=null,curveSharePercent:number|null=null;
   let observedCurveBalanceRaw:string|null=null,mintSupplyRaw:string|null=null;
   let largestAccountsReturned=0;
+  let curveAccountProgramOwned=false,canonicalCurveAtaObserved=false;
+  let curveCustodyEvidence='NOT_CHECKED';
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
@@ -97,6 +101,16 @@ async function main():Promise<void>{
    const largest=await rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}]);
    mintAccountResponse=mintAccount;
    checkedAt=new Date().toISOString();
+   const curveAccount=await rpc('getAccountInfo',[curve,{encoding:'base64',commitment:'finalized'}]);
+   curveAccountProgramOwned=curveAccount.value?.owner===pump.toBase58()&&
+    curveAccount.value?.executable===false&&
+    Array.isArray(curveAccount.value?.data)&&
+    typeof curveAccount.value.data[0]==='string'&&curveAccount.value.data[0].length>0;
+   const canonicalCurveAta=PublicKey.findProgramAddressSync([
+    new PublicKey(curve).toBuffer(),
+    tokenProgram.toBuffer(),new PublicKey(mint).toBuffer()
+   ],associatedProgram)[0].toBase58();
+   curveCustodyEvidence=curveAccountProgramOwned?'CURVE_PDA_PROGRAM_OWNER_CONFIRMED':'CURVE_PDA_NOT_PROGRAM_OWNED';
    const mintEvidence=parseMintAccountEvidence(mint,mintAccount);
    mintAuthority=mintEvidence.mintAuthority;
    freezeAuthority=mintEvidence.freezeAuthority;
@@ -137,6 +151,8 @@ async function main():Promise<void>{
        accountProgram!=='TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
      throw Error('UNEXPECTED_TOKEN_ACCOUNT_PROGRAM');
     if(owner===curve){
+     if(accounts[i].address===canonicalCurveAta&&accountProgram===tokenProgram.toBase58())
+      canonicalCurveAtaObserved=true;
      // Custody is not excluded unless the account is demonstrably controlled
      // by the expected bonding-curve PDA for this exact mint.
      curveAccounts++;observedCurveBalance+=BigInt(raw);continue;
@@ -144,6 +160,9 @@ async function main():Promise<void>{
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    observedCurveBalanceRaw=observedCurveBalance.toString();
+   curveCustodyEvidence=curveAccountProgramOwned&&canonicalCurveAtaObserved?
+    'CURVE_PDA_AND_CANONICAL_TOKEN_ACCOUNT_OBSERVED':
+    'CURVE_CUSTODY_IDENTITY_INCOMPLETE';
    counted=Math.min(eligible.length,10);
    // The RPC returns at most 20 largest accounts. If fewer than 20 are
    // returned, the available set is complete; top-ten means up to ten.
@@ -177,7 +196,9 @@ async function main():Promise<void>{
    topTenNonCurveSharePercent:percent,topTenOutsideCurvePercent:outsideCurvePercent,
    excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted});
   console.log(JSON.stringify({mint,status,reason,policyVerdict,quickNodeVerdict,
-   mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,topTenNonCurveSharePercent:percent,
+   mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,
+   curveAccountProgramOwned,canonicalCurveAtaObserved,curveCustodyEvidence,
+   topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
    outsideCurveMetric:'ADVISORY_ONLY; curve custody not independently verified',
