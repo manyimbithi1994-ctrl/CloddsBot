@@ -229,9 +229,11 @@ async function main():Promise<void>{
      curveSupply===standardSupply&&observedDifference===standardReserved?
       'STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE':
      'RESERVE_ALLOCATION_NOT_VERIFIED_FOR_THIS_CURVE';
-    reserveReconciliation=vault===real?'REAL_RESERVES_EQUAL_VAULT':
-     vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNEXPLAINED':
-     'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNEXPLAINED';
+    reserveReconciliation=reserveAccountingStatus==='STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE'?
+     'STANDARD_PUMP_RESERVED_ALLOCATION_RECONCILED':
+     vault===real?'REAL_RESERVES_EQUAL_VAULT':
+     vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNVERIFIED':
+     'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNVERIFIED';
    }
    curveCustodyEvidence=curveAccountProgramOwned&&curveOwnedTokenAccounts.length>0?
     'CURVE_PDA_AND_OWNED_TOKEN_ACCOUNTS_OBSERVED':
