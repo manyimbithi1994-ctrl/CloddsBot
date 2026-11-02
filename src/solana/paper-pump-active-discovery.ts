@@ -39,7 +39,7 @@ export function evaluateActivePair(pair:unknown,now:number){
 }
 
 function loadRecentVerified(now:number){
- const latest=new Map<string,{mint:string;signature:string;checkedAt:string}>();
+ const latest=new Map<string,{mint:string;signature:string;checkedAt:string;createdAt:string}>();
  for(const line of readFileSync(SOURCE,'utf8').split('\n')){
   if(!line.trim())continue;
   try{
@@ -47,10 +47,10 @@ function loadRecentVerified(now:number){
    if(typeof r.mint!=='string'||!MINT.test(r.mint))continue;
    if(r.status!=='VERIFIED_PUMP_FUN'||r.programId!==PROGRAM||
     typeof r.signature!=='string'||r.signature.length===0||
-    typeof r.checkedAt!=='string')continue;
-   const age=now-Date.parse(r.checkedAt);
+    typeof r.checkedAt!=='string'||typeof r.createdAt!=='string')continue;
+   const age=now-Date.parse(r.createdAt);
    if(!Number.isFinite(age)||age<0||age>MAX_AGE_MS)continue;
-   latest.set(r.mint,{mint:r.mint,signature:r.signature,checkedAt:r.checkedAt});
+   latest.set(r.mint,{mint:r.mint,signature:r.signature,checkedAt:r.checkedAt,createdAt:r.createdAt});
   }catch{/* malformed records never qualify */}
  }
  return [...latest.values()].slice(-MAX_CANDIDATES);
@@ -82,7 +82,7 @@ async function main(){
    const evidence=best?.evidence??{active:false,reasons:['NO_INDEXED_PAIR'],
     buys5m:null,sells5m:null,volume5mUsd:null,liquidityUsd:null,momentumProxy:null,preferredAgeWindow:false,pairAgeMs:null};
    const record={mint:candidate.mint,creationSignature:candidate.signature,
-    creationVerifiedAt:candidate.checkedAt,checkedAt:new Date().toISOString(),
+    creationVerifiedAt:candidate.checkedAt,createdAt:candidate.createdAt,checkedAt:new Date().toISOString(),
     source:'DEXSCREENER_ADVISORY',pairAddress:best?.pair?.pairAddress??null,
     ...evidence,stage:evidence.active?'ACTIVE_FOR_FURTHER_RESEARCH':'ACTIVITY_NOT_VERIFIED',
     onchainTradeEvidenceVerified:false,curveCustodyVerified:false,
