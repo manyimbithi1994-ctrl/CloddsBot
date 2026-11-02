@@ -43,7 +43,8 @@ for (const item of records.slice(0, limit)) {
     if (!response.ok) continue;
     const payload = await response.json() as any;
     const tx = payload.result;
-    if (!tx || !tx.meta || tx.meta.err !== null) continue;
+    if (!tx || !tx.meta || tx.meta.err !== null ||
+        typeof tx.blockTime !== 'number' || !Number.isSafeInteger(tx.blockTime) || tx.blockTime <= 0) continue;
     const instructions = [
       ...(tx.transaction?.message?.instructions ?? []),
       ...(tx.meta.innerInstructions ?? []).flatMap((g: any) => g.instructions ?? [])
@@ -51,7 +52,8 @@ for (const item of records.slice(0, limit)) {
     if (!instructions.some((ix: any) => decodeCreationMint(ix) === item.mint)) continue;
     const record = {
       signature: item.signature, mint: item.mint, programId: PUMP_PROGRAM,
-      checkedAt: new Date().toISOString(), status: 'VERIFIED_PUMP_FUN',
+      checkedAt: new Date().toISOString(), createdAt: new Date(tx.blockTime * 1000).toISOString(),
+      status: 'VERIFIED_PUMP_FUN',
       automatedTradingEligible: false
     };
     appendFileSync(target, JSON.stringify(record) + '\n');
