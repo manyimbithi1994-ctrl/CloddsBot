@@ -102,8 +102,10 @@ async function main():Promise<void>{
     outsideCurvePercent=Number(total*10000n/outsideSupply)/100;
     curveSharePercent=Number(observedCurveBalance*10000n/supply)/100;
     outsideCurveStatus=outsideCurvePercent>40?'HIGH_OUTSIDE_CURVE_CONCENTRATION_WARNING':'BELOW_OUTSIDE_CURVE_WARNING_THRESHOLD';
-   }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';
-    throw Error('CURVE_BALANCE_AT_OR_ABOVE_MINT_SUPPLY');}
+   }else if(observedCurveBalance===supply){outsideCurveStatus='ZERO_OBSERVED_OUTSIDE_CURVE_SUPPLY';
+    throw Error('NO_OBSERVED_CIRCULATING_SUPPLY');}
+   else if(observedCurveBalance>supply){outsideCurveStatus='INVALID_CURVE_BALANCE';
+    throw Error('CURVE_BALANCE_EXCEEDS_MINT_SUPPLY');}
    else{outsideCurveStatus='CURVE_CUSTODY_NOT_OBSERVED';}
    status=percent>40?'HIGH_CONCENTRATION_RISK':'INCOMPLETE_VERIFICATION';
    reason=percent>40?'TOP_TEN_NON_CURVE_ACCOUNTS_OVER_40_PERCENT':
