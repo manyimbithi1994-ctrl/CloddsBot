@@ -89,6 +89,7 @@ async function main():Promise<void>{
   let observedCurveBalanceRaw:string|null=null,mintSupplyRaw:string|null=null;
   let largestAccountsReturned=0;
   let curveAccountProgramOwned=false,canonicalCurveAtaObserved=false;
+  let canonicalCurveAtaExists=false,canonicalCurveAtaBalanceRaw:string|null=null;
   let curveCustodyEvidence='NOT_CHECKED';
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
@@ -111,6 +112,14 @@ async function main():Promise<void>{
     tokenProgram.toBuffer(),new PublicKey(mint).toBuffer()
    ],associatedProgram)[0].toBase58();
    curveCustodyEvidence=curveAccountProgramOwned?'CURVE_PDA_PROGRAM_OWNER_CONFIRMED':'CURVE_PDA_NOT_PROGRAM_OWNED';
+   const canonicalAccount=await rpc('getAccountInfo',[canonicalCurveAta,{encoding:'jsonParsed',commitment:'finalized'}]);
+   const canonicalInfo=canonicalAccount.value?.data?.parsed?.info;
+   canonicalCurveAtaExists=canonicalAccount.value!==null;
+   if(canonicalCurveAtaExists&&canonicalAccount.value?.owner===tokenProgram.toBase58()&&
+      canonicalInfo?.mint===mint&&canonicalInfo?.owner===curve&&
+      typeof canonicalInfo?.tokenAmount?.amount==='string'&&
+      /^\\d+$/.test(canonicalInfo.tokenAmount.amount))
+    canonicalCurveAtaBalanceRaw=canonicalInfo.tokenAmount.amount;
    const mintEvidence=parseMintAccountEvidence(mint,mintAccount);
    mintAuthority=mintEvidence.mintAuthority;
    freezeAuthority=mintEvidence.freezeAuthority;
@@ -160,8 +169,8 @@ async function main():Promise<void>{
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    observedCurveBalanceRaw=observedCurveBalance.toString();
-   curveCustodyEvidence=curveAccountProgramOwned&&canonicalCurveAtaObserved?
-    'CURVE_PDA_AND_CANONICAL_TOKEN_ACCOUNT_OBSERVED':
+   curveCustodyEvidence=curveAccountProgramOwned&&canonicalCurveAtaBalanceRaw!==null?
+    'CURVE_PDA_AND_CANONICAL_TOKEN_ACCOUNT_VERIFIED':
     'CURVE_CUSTODY_IDENTITY_INCOMPLETE';
    counted=Math.min(eligible.length,10);
    // The RPC returns at most 20 largest accounts. If fewer than 20 are
@@ -197,7 +206,8 @@ async function main():Promise<void>{
    excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted});
   console.log(JSON.stringify({mint,status,reason,policyVerdict,quickNodeVerdict,
    mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,
-   curveAccountProgramOwned,canonicalCurveAtaObserved,curveCustodyEvidence,
+   curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
+   canonicalCurveAtaBalanceRaw,curveCustodyEvidence,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
