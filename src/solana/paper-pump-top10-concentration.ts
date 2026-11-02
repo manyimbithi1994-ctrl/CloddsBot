@@ -113,6 +113,7 @@ async function main():Promise<void>{
   let reserveReconciliation='NOT_CHECKED';
   let reserveVaultExcessRaw:string|null=null;
   let reserveAccountingStatus='UNVERIFIED';
+  let documentedReservedAllocationRaw:string|null=null;
   let curveInitialSupplyMinusMintSupplyRaw:string|null=null;
   let nonCurvePositiveBalanceAccounts=0;
   let outsideCurveStatus='UNKNOWN';
@@ -215,10 +216,19 @@ async function main():Promise<void>{
     const curveSupply=BigInt(bondingCurveState.tokenTotalSupplyRaw);
     const currentMintSupply=BigInt(supplyRaw);
     curveInitialSupplyMinusMintSupplyRaw=(curveSupply-currentMintSupply).toString();
+    // Pump.fun public program docs specify 1B total / 793.1M initially
+    // tradeable tokens (raw units shown below for six-decimal mints).
+    // This is a known configuration, not a universal rule for all curves.
+    const standardSupply=1000000000000000n;
+    const standardInitialReal=793100000000000n;
+    const standardReserved=standardSupply-standardInitialReal;
+    const observedDifference=vault-real;
+    documentedReservedAllocationRaw=curveSupply===standardSupply?standardReserved.toString():null;
     reserveAccountingStatus=vault<real?'REAL_RESERVES_EXCEED_OBSERVED_VAULT':
      curveSupply<currentMintSupply?'CURRENT_MINT_SUPPLY_EXCEEDS_CURVE_RECORDED_TOTAL':
-     curveSupply===currentMintSupply?'CURRENT_AND_CURVE_SUPPLY_EQUAL_RESERVE_DIFFERENCE_UNEXPLAINED':
-     'CURVE_RECORDED_TOTAL_EXCEEDS_CURRENT_MINT_SUPPLY_BURN_UNVERIFIED';
+     curveSupply===standardSupply&&observedDifference===standardReserved?
+      'STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE':
+     'RESERVE_ALLOCATION_NOT_VERIFIED_FOR_THIS_CURVE';
     reserveReconciliation=vault===real?'REAL_RESERVES_EQUAL_VAULT':
      vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNEXPLAINED':
      'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNEXPLAINED';
@@ -263,7 +273,7 @@ async function main():Promise<void>{
    curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
    canonicalCurveAtaBalanceRaw,curveOwnedTokenAccounts,curveCustodyEvidence,
    bondingCurveState,reserveReconciliation,reserveVaultExcessRaw,reserveAccountingStatus,
-   curveInitialSupplyMinusMintSupplyRaw,
+   curveInitialSupplyMinusMintSupplyRaw,documentedReservedAllocationRaw,
    nonCurvePositiveBalanceAccounts,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
