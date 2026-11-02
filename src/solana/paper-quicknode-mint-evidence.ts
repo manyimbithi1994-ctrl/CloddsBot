@@ -21,7 +21,7 @@ export function parseMintAccountEvidence(expectedMint:string, response:unknown):
     reasons.push('MINT_PROGRAM_UNVERIFIED');
   if (!obj(parsed) || parsed.type !== 'mint' || !info) reasons.push('MINT_ACCOUNT_UNVERIFIED');
   const supplyRaw = info?.supply;
-  const supply = typeof supplyRaw === 'string' && /^\\d+$/.test(supplyRaw) && BigInt(supplyRaw)>0n
+  const supply = typeof supplyRaw === 'string' && /^\d+$/.test(supplyRaw) && BigInt(supplyRaw)>0n
     ? BigInt(supplyRaw) : null;
   if (supply === null) reasons.push('MINT_SUPPLY_UNVERIFIED');
   const authority = (field:'mintAuthority'|'freezeAuthority'):string|null|undefined => {
