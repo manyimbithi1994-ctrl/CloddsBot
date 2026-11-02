@@ -43,7 +43,6 @@ export function executePaperMarketDecision(
         entryPriceUsd,
         account: engine.snapshot()
       };
-
     }
 
     engine.sell(decision.quantity, decision.priceUsd, 100);
