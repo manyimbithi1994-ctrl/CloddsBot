@@ -85,7 +85,8 @@ async function main():Promise<void>{
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    counted=Math.min(eligible.length,10);
-   if(eligible.length<10) throw Error('TOP_TEN_NON_CURVE_ACCOUNTS_NOT_VERIFIED');
+   // The RPC returns at most 20 largest accounts. If fewer than 20 are
+   // returned, the available set is complete; top-ten means up to ten.
    if(eligible.length<10&&accounts.length===20)
     throw Error('TOP_TEN_NON_CURVE_ACCOUNTS_NOT_COVERED');
    const total=eligible.slice(0,10).reduce((s,a)=>s+a.amount,0n);
@@ -96,7 +97,8 @@ async function main():Promise<void>{
     outsideCurvePercent=Number(total*10000n/outsideSupply)/100;
     curveSharePercent=Number(observedCurveBalance*10000n/supply)/100;
     outsideCurveStatus=outsideCurvePercent>40?'HIGH_OUTSIDE_CURVE_CONCENTRATION_WARNING':'BELOW_OUTSIDE_CURVE_WARNING_THRESHOLD';
-   }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';}
+   }else if(observedCurveBalance>=supply){outsideCurveStatus='INVALID_CURVE_BALANCE';
+    throw Error('CURVE_BALANCE_AT_OR_ABOVE_MINT_SUPPLY');}
    else{outsideCurveStatus='CURVE_CUSTODY_NOT_OBSERVED';}
    status=percent>40?'HIGH_CONCENTRATION_RISK':'INCOMPLETE_VERIFICATION';
    reason=percent>40?'TOP_TEN_NON_CURVE_ACCOUNTS_OVER_40_PERCENT':
