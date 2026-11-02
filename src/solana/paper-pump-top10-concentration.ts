@@ -27,6 +27,8 @@ async function main():Promise<void>{
   let status='UNKNOWN',reason='INCOMPLETE_DATA',percent:number|null=null;
   let counted=0,curveAccounts=0;
   let outsideCurvePercent:number|null=null,curveSharePercent:number|null=null;
+  let observedCurveBalanceRaw:string|null=null,mintSupplyRaw:string|null=null;
+  let largestAccountsReturned=0;
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
@@ -49,6 +51,8 @@ async function main():Promise<void>{
    if(typeof supplyRaw!=='string'||!/^\d+$/.test(supplyRaw)||BigInt(supplyRaw)===0n)
     throw Error('INVALID_MINT_SUPPLY');
    if(!Array.isArray(largest.value))throw Error('MISSING_LARGEST_ACCOUNTS');
+   largestAccountsReturned=largest.value.length;
+   mintSupplyRaw=supplyRaw;
    const accounts=largest.value.slice(0,20);
    // Bound response sizes to avoid HTTP 413 from large jsonParsed batches.
    // Fail closed if any chunk cannot be inspected; no unbounded retries.
@@ -84,6 +88,7 @@ async function main():Promise<void>{
     }
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
+   observedCurveBalanceRaw=observedCurveBalance.toString();
    counted=Math.min(eligible.length,10);
    // The RPC returns at most 20 largest accounts. If fewer than 20 are
    // returned, the available set is complete; top-ten means up to ten.
@@ -114,7 +119,8 @@ async function main():Promise<void>{
    nowMs:Date.now(),curveCustodyVerified:false,
    topTenNonCurveSharePercent:percent,topTenOutsideCurvePercent:outsideCurvePercent,
    excludedCurveAccounts:curveAccounts,nonCurveAccountsCounted:counted});
-  console.log(JSON.stringify({mint,status,reason,policyVerdict,quickNodeVerdict,topTenNonCurveSharePercent:percent,
+  console.log(JSON.stringify({mint,status,reason,policyVerdict,quickNodeVerdict,
+   mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
    outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
