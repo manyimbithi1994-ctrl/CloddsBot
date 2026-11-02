@@ -4,12 +4,14 @@ export interface PaperRiskPolicy {
   maxOrderUsd: number;
   maxOpenPositions: number;
   maxSlippageBps: number;
+  maxDailyLossUsd: number;
 }
 export const DEFAULT_PAPER_RISK: Readonly<PaperRiskPolicy> = Object.freeze({
   initialCashUsd: 20,
   maxOrderUsd: 4,
   maxOpenPositions: 1,
   maxSlippageBps: 300,
+  maxDailyLossUsd: 2,
 });
 export interface PaperOrderRequest {
   spendUsd: number;
@@ -23,9 +25,11 @@ export function assertPaperOrderAllowed(order: PaperOrderRequest, policy: PaperR
   if (!numbers.every(v => typeof v === 'number' && Number.isFinite(v))) throw new Error('Invalid numeric risk input');
   if (policy.initialCashUsd <= 0 || policy.maxOrderUsd <= 0 || policy.maxOrderUsd > policy.initialCashUsd ||
       policy.maxOpenPositions < 1 || !Number.isInteger(policy.maxOpenPositions) ||
-policy.maxSlippageBps < 0 || policy.maxSlippageBps >= 10000) throw new Error('Invalid risk policy');
+policy.maxSlippageBps < 0 || policy.maxSlippageBps >= 10000 ||
+      policy.maxDailyLossUsd <= 0 || policy.maxDailyLossUsd > policy.initialCashUsd) throw new Error('Invalid risk policy');
   if (order.spendUsd <= 0 || order.spendUsd > policy.maxOrderUsd || order.spendUsd > order.cashUsd ||
       order.cashUsd < 0 || !Number.isInteger(order.openPositions) || order.openPositions < 0 ||
-      order.openPositions >= policy.maxOpenPositions || order.slippageBps < 0 || order.slippageBps > policy.maxSlippageBps)
+      order.openPositions >= policy.maxOpenPositions ||
+      order.realizedDailyPnlUsd <= -policy.maxDailyLossUsd || order.slippageBps < 0 || order.slippageBps > policy.maxSlippageBps)
     throw new Error('Paper order blocked by risk policy');
 }
