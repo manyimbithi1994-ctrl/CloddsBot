@@ -1,0 +1,30 @@
+name: Paper research checks
+on:
+  push:
+    branches:
+      - recovery/paper-journal-and-locks
+    paths:
+      - 'src/solana/paper-*.ts'
+      - 'tests/trading/paper-*.test.ts'
+      - 'tests/trading/pumpfun-paper-*.test.ts'
+      - '.github/workflows/paper-research-checks.yml'
+  workflow_dispatch:
+jobs:
+  paper-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install without postinstall network side effects
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+      - name: Run paper research unit tests
+        run: |
+          node --test --import tsx tests/trading/paper-research-certificate.test.ts tests/trading/paper-rugcheck-stage.test.ts tests/trading/paper-dexscreener-stage.test.ts tests/trading/paper-research-sequence.test.ts tests/trading/pumpfun-paper-risk.test.ts tests/trading/pumpfun-paper-engine.test.ts
