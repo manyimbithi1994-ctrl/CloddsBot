@@ -43,15 +43,39 @@ function loadCandidates():string[]{
 const mints=loadCandidates();
 const pump=new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 let rpcRequests=0;
+const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
+let lastRpcAt=0;
 async function rpc(method:string,params:unknown[]):Promise<any>{
- rpcRequests++;
- const response=await fetch(rpcUrl!,{method:'POST',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({jsonrpc:'2.0',id:rpcRequests,method,params}),signal:AbortSignal.timeout(8000)});
- if(!response.ok)throw Error('RPC HTTP '+response.status);
- const data:any=await response.json();
- if(data.error||!data.result)throw Error('Invalid RPC response');
- return data.result;
+ for(let attempt=1;attempt<=3;attempt++){
+  const pause=Math.max(0,350-(Date.now()-lastRpcAt));
+  if(pause)await wait(pause);
+  lastRpcAt=Date.now();
+  rpcRequests++;
+  try{
+   const response=await fetch(rpcUrl!,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:rpcRequests,method,params}),signal:AbortSignal.timeout(8000)});
+   if(response.status===429||[502,503,504].includes(response.status)){
+    if(attempt===3)throw Error('RPC_RETRY_EXHAUSTED_HTTP_'+response.status);
+    const header=response.headers.get('retry-after');
+    const seconds=header&&/^\\d+$/.test(header)?Number(header):null;
+    await wait(seconds===null?1000*2**(attempt-1):Math.min(10000,seconds*1000));
+    continue;
+   }
+   if(!response.ok)throw Error('RPC HTTP '+response.status);
+   const data:any=await response.json();
+   if(data.error||!data.result)throw Error('Invalid RPC response');
+   return data.result;
+  }catch(e){
+   if(attempt===3)throw e;
+   if(e instanceof Error&&e.message.startsWith('RPC_RETRY_EXHAUSTED_'))throw e;
+   // Network timeouts are transient; malformed responses and permanent HTTP errors are not.
+   if(e instanceof Error&&(/^(RPC HTTP |Invalid RPC response)/.test(e.message)))throw e;
+   await wait(1000*2**(attempt-1));
+  }
+ }
+ throw Error('RPC_RETRY_EXHAUSTED');
 }
+
 async function main():Promise<void>{
  if(!mints.length){console.log(JSON.stringify({mode:'READ_ONLY',screened:0,rpcRequests:0,reason:'NO_FRESH_VERIFIED_RUGCHECK_CANDIDATES',approvedForTrading:0}));return;}
  for(const mint of mints){
@@ -69,10 +93,8 @@ async function main():Promise<void>{
   let mintAccountResponse:unknown=null;
   let checkedAt=new Date().toISOString();
   try{
-   const [mintAccount,largest]=await Promise.all([
-    rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]),
-    rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}])
-   ]);
+   const mintAccount=await rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]);
+   const largest=await rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}]);
    mintAccountResponse=mintAccount;
    checkedAt=new Date().toISOString();
    const mintEvidence=parseMintAccountEvidence(mint,mintAccount);
