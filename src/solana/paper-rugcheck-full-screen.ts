@@ -4,6 +4,7 @@
 import {readFileSync,existsSync,mkdirSync,appendFileSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {assessRugcheckReport} from './paper-rugcheck-evidence';
+import {assessRugcheckStage} from './paper-rugcheck-stage';
 
 const input=resolve('.paper-sessions/pump-market-screen.jsonl');
 const output=resolve('.paper-sessions/pump-rugcheck-full-review.jsonl');
@@ -68,11 +69,15 @@ async function main():Promise<void>{
   if(!data||!object(data.token))reasons.push('TOKEN_DETAILS_MISSING');
   if(!data||!Array.isArray(data.topHolders))reasons.push('TOP_HOLDERS_MISSING');
   if(!data||!Array.isArray(data.markets))reasons.push('MARKET_DETAILS_MISSING');
+  const stage=assessRugcheckStage({mint,reportMint:typeof data?.mint==='string'?data.mint:null,
+   apiError:error,risks:data?.risks,score:data?.score,token:data?.token,
+   holders:data?.topHolders,markets:data?.markets});
   const evidence=assessRugcheckReport(data,mint);
   reasons.push(...evidence.reasons);
   // Even a complete Rugcheck report cannot substitute for DexScreener and RPC.
   const result={mint,checkedAt:new Date().toISOString(),attempts,
    status:reasons.length?'REJECT_UNVERIFIED_OR_RISK':'RUGCHECK_RESEARCH_PASS',
+   rugcheckStageStatus:stage.status,rugcheckStageReasons:stage.reasons,
    topTenReportedPercent:evidence.topTenReportedPercent,
    reasons:[...new Set(reasons)],riskCount:riskLevels.length,riskLevels,
    topHoldersCount:Array.isArray(data?.topHolders)?data.topHolders.length:null,
