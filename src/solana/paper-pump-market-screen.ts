@@ -23,12 +23,16 @@ for (const line of readFileSync(source, 'utf8').split('\n')) {
   } catch { /* ignore invalid journal entries */ }
 }
 mkdirSync(dirname(target), { recursive: true });
-const previous = new Set<string>();
+const previous = new Map<string, number>();
 try {
   for (const line of readFileSync(target, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     const r = JSON.parse(line);
-    if (typeof r.mint === 'string') previous.add(r.mint);
+    if (typeof r.mint === 'string') {
+      const timestamp = typeof r.checkedAt === 'string' ? Date.parse(r.checkedAt) : NaN;
+      // Latest valid record wins; malformed or undated records never suppress a retry.
+      previous.set(r.mint, Number.isFinite(timestamp) ? timestamp : 0);
+    }
   }
 } catch { /* first run */ }
 // Only Rugcheck-reviewed mints may reach DexScreener. Missing or malformed
@@ -55,7 +59,9 @@ try {
   }
 } catch { /* absent Rugcheck results => no DexScreener candidates */ }
 const selected = [...mints.values()].filter(x =>
-  rugcheckApproved.has(x.mint) && !previous.has(x.mint)).slice(0, max);
+  rugcheckApproved.has(x.mint) &&
+  (Date.now() - (previous.get(x.mint) ?? 0) >= 300000 ||
+   Date.now() < (previous.get(x.mint) ?? 0))).slice(0, max);
 const metric = (x: unknown): number | null =>
   typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null;
 async function main(): Promise<void> {
