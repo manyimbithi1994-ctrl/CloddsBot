@@ -59,7 +59,7 @@ async function rpc(method:string,params:unknown[]):Promise<any>{
    if(response.status===429||[502,503,504].includes(response.status)){
     if(attempt===3)throw Error('RPC_RETRY_EXHAUSTED_HTTP_'+response.status);
     const header=response.headers.get('retry-after');
-    const seconds=header&&/^\\d+$/.test(header)?Number(header):null;
+    const seconds=header&&/^\d+$/.test(header)?Number(header):null;
     await wait(seconds===null?1000*2**(attempt-1):Math.min(10000,seconds*1000));
     continue;
    }
@@ -119,7 +119,7 @@ async function main():Promise<void>{
    if(canonicalCurveAtaExists&&canonicalAccount.value?.owner===tokenProgram.toBase58()&&
       canonicalInfo?.mint===mint&&canonicalInfo?.owner===curve&&
       typeof canonicalInfo?.tokenAmount?.amount==='string'&&
-      /^\\d+$/.test(canonicalInfo.tokenAmount.amount))
+      /^\d+$/.test(canonicalInfo.tokenAmount.amount))
     canonicalCurveAtaBalanceRaw=canonicalInfo.tokenAmount.amount;
    const owned=await rpc('getTokenAccountsByOwner',[curve,{mint},{encoding:'jsonParsed',commitment:'finalized'}]);
    if(!Array.isArray(owned.value))throw Error('CURVE_OWNED_ACCOUNTS_UNVERIFIED');
@@ -127,7 +127,7 @@ async function main():Promise<void>{
     const info=entry?.account?.data?.parsed?.info;
     const amount=info?.tokenAmount?.amount;
     if(entry?.account?.owner!==tokenProgram.toBase58()||info?.mint!==mint||
-       info?.owner!==curve||typeof amount!=='string'||!/^\\d+$/.test(amount)||
+       info?.owner!==curve||typeof amount!=='string'||!/^\d+$/.test(amount)||
        typeof entry.pubkey!=='string')throw Error('INVALID_CURVE_OWNED_TOKEN_ACCOUNT');
     curveOwnedTokenAccounts.push({address:entry.pubkey,amountRaw:amount});
    }
