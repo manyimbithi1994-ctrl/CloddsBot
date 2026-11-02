@@ -6,7 +6,7 @@ import {resolve,dirname} from 'node:path';
 import {assessRugcheckReport} from './paper-rugcheck-evidence';
 import {assessRugcheckStage} from './paper-rugcheck-stage';
 
-const input=resolve('.paper-sessions/pump-market-screen.jsonl');
+const input=resolve('.paper-sessions/pump-verified-creations.jsonl');
 const output=resolve('.paper-sessions/pump-rugcheck-full-review.jsonl');
 const MAX_CANDIDATES=10;
 const MAX_ATTEMPTS=3;
@@ -43,7 +43,7 @@ async function fetchReport(mint:string):Promise<{data:RecordValue|null;attempts:
  return {data:null,attempts:MAX_ATTEMPTS,error};
 }
 async function main():Promise<void>{
- if(!existsSync(input))throw Error('Missing market-screen candidates: run discovery first');
+ if(!existsSync(input))throw Error('Missing verified creations: run Pump.fun discovery first');
  const latest=new Map<string,RecordValue>();
  for(const line of readFileSync(input,'utf8').split('\n')){
   if(!line.trim())continue;
@@ -52,7 +52,9 @@ async function main():Promise<void>{
    if(object(item)&&typeof item.mint==='string'&&mintPattern.test(item.mint))latest.set(item.mint,item);
   }catch{/* malformed candidate cannot become eligible */}
  }
- const candidates=[...latest.values()].filter(r=>r.origin==='VERIFIED_PUMP_FUN').slice(0,MAX_CANDIDATES);
+ const candidates=[...latest.values()].filter(r=>r.status==='VERIFIED_PUMP_FUN' &&
+  r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' &&
+  typeof r.signature==='string' && r.signature.length>0).slice(0,MAX_CANDIDATES);
  mkdirSync(dirname(output),{recursive:true});
  for(const candidate of candidates){
   const mint=candidate.mint as string;
