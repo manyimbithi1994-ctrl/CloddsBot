@@ -3,6 +3,7 @@
  * accounts are acceptable only when the returned list is complete.
  */
 import {PublicKey} from '@solana/web3.js';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {evaluateConcentrationPolicy} from './paper-concentration-policy';
 import {parseMintAccountEvidence} from './paper-quicknode-mint-evidence';
@@ -41,6 +42,21 @@ function loadCandidates():string[]{
   .slice(0,10).map(([mint])=>mint);
 }
 const mints=loadCandidates();
+const curveDiscriminator=createHash('sha256').update('account:BondingCurve').digest().subarray(0,8);
+function inspectCurveState(encoded:unknown):{realTokenReservesRaw:string;virtualTokenReservesRaw:string;realSolReservesRaw:string;virtualSolReservesRaw:string;tokenTotalSupplyRaw:string;complete:boolean}{
+ if(!Array.isArray(encoded)||typeof encoded[0]!=='string'||encoded[1]!=='base64')
+  throw Error('CURVE_STATE_ENCODING_UNVERIFIED');
+ const bytes=Buffer.from(encoded[0],'base64');
+ if(bytes.length<49||!bytes.subarray(0,8).equals(curveDiscriminator))
+  throw Error('CURVE_STATE_DISCRIMINATOR_OR_LENGTH_INVALID');
+ return {virtualTokenReservesRaw:bytes.readBigUInt64LE(8).toString(),
+  virtualSolReservesRaw:bytes.readBigUInt64LE(16).toString(),
+  realTokenReservesRaw:bytes.readBigUInt64LE(24).toString(),
+  realSolReservesRaw:bytes.readBigUInt64LE(32).toString(),
+  tokenTotalSupplyRaw:bytes.readBigUInt64LE(40).toString(),
+  complete:bytes[48]===1};
+}
+
 const pump=new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 const tokenProgram=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const token2022Program=new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
@@ -93,6 +109,8 @@ async function main():Promise<void>{
   let canonicalCurveAtaExists=false,canonicalCurveAtaBalanceRaw:string|null=null;
   let curveOwnedTokenAccounts:Array<{address:string;amountRaw:string}>=[];
   let curveCustodyEvidence='NOT_CHECKED';
+  let bondingCurveState:ReturnType<typeof inspectCurveState>|null=null;
+  let reserveReconciliation='NOT_CHECKED';
   let outsideCurveStatus='UNKNOWN';
   let mintAuthority:string|null|undefined=undefined;
   let freezeAuthority:string|null|undefined=undefined;
@@ -112,6 +130,7 @@ async function main():Promise<void>{
     curveAccount.value?.executable===false&&
     Array.isArray(curveAccount.value?.data)&&
     typeof curveAccount.value.data[0]==='string'&&curveAccount.value.data[0].length>0;
+   if(curveAccountProgramOwned)bondingCurveState=inspectCurveState(curveAccount.value.data);
    const canonicalCurveAta=PublicKey.findProgramAddressSync([
     new PublicKey(curve).toBuffer(),
     new PublicKey(mintTokenProgram).toBuffer(),new PublicKey(mint).toBuffer()
@@ -184,6 +203,11 @@ async function main():Promise<void>{
     eligible.push({address:accounts[i].address,amount:BigInt(raw)});
    }
    observedCurveBalanceRaw=observedCurveBalance.toString();
+   if(bondingCurveState){
+    const real=BigInt(bondingCurveState.realTokenReservesRaw);
+    const vault=curveOwnedTokenAccounts.reduce((sum,account)=>sum+BigInt(account.amountRaw),0n);
+    reserveReconciliation=vault===real?'MATCH':'MISMATCH_REAL_RESERVES_VS_VAULT_BALANCE';
+   }
    curveCustodyEvidence=curveAccountProgramOwned&&curveOwnedTokenAccounts.length>0?
     'CURVE_PDA_AND_OWNED_TOKEN_ACCOUNTS_OBSERVED':
     'CURVE_CUSTODY_IDENTITY_INCOMPLETE';
@@ -223,6 +247,7 @@ async function main():Promise<void>{
    mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,
    curveAccountProgramOwned,canonicalCurveAtaObserved,canonicalCurveAtaExists,
    canonicalCurveAtaBalanceRaw,curveOwnedTokenAccounts,curveCustodyEvidence,
+   bondingCurveState,reserveReconciliation,
    topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
