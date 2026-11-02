@@ -8,6 +8,7 @@ import {readFileSync} from 'node:fs';
 import {evaluateConcentrationPolicy} from './paper-concentration-policy';
 import {parseMintAccountEvidence} from './paper-quicknode-mint-evidence';
 import {assessQuickNodeEvidence} from './paper-quicknode-evidence';
+import {reconcileStandardPumpReserves} from './paper-pump-reserve-accounting';
 const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
 const mintPattern=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -216,21 +217,21 @@ async function main():Promise<void>{
     const curveSupply=BigInt(bondingCurveState.tokenTotalSupplyRaw);
     const currentMintSupply=BigInt(supplyRaw);
     curveInitialSupplyMinusMintSupplyRaw=(curveSupply-currentMintSupply).toString();
-    // Pump.fun public program docs specify 1B total / 793.1M initially
-    // tradeable tokens (raw units shown below for six-decimal mints).
-    // This is a known configuration, not a universal rule for all curves.
-    const standardSupply=1000000000000000n;
-    const standardInitialReal=793100000000000n;
-    const standardReserved=standardSupply-standardInitialReal;
-    const observedDifference=vault-real;
-    documentedReservedAllocationRaw=curveSupply===standardSupply?standardReserved.toString():null;
-    reserveAccountingStatus=vault<real?'REAL_RESERVES_EXCEED_OBSERVED_VAULT':
-     curveSupply<currentMintSupply?'CURRENT_MINT_SUPPLY_EXCEEDS_CURVE_RECORDED_TOTAL':
-     curveSupply===standardSupply&&observedDifference===standardReserved?
-      'STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE':
+    const accounting=reconcileStandardPumpReserves({
+     curveTotalSupplyRaw:bondingCurveState.tokenTotalSupplyRaw,
+     currentMintSupplyRaw:supplyRaw,
+     vaultBalanceRaw:vault.toString(),
+     realTokenReservesRaw:bondingCurveState.realTokenReservesRaw
+    });
+    documentedReservedAllocationRaw=curveSupply===1000000000000000n?
+     '206900000000000':null;
+    reserveAccountingStatus=accounting.matchesStandardAllocation?
+     'STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE':
+     vault<real?'REAL_RESERVES_EXCEED_OBSERVED_VAULT':
+     curveSupply<BigInt(supplyRaw)?'CURRENT_MINT_SUPPLY_EXCEEDS_CURVE_RECORDED_TOTAL':
      'RESERVE_ALLOCATION_NOT_VERIFIED_FOR_THIS_CURVE';
-    reserveReconciliation=reserveAccountingStatus==='STANDARD_PUMP_RESERVED_ALLOCATION_MATCHES_OBSERVED_DIFFERENCE'?
-     'STANDARD_PUMP_RESERVED_ALLOCATION_RECONCILED':
+    reserveReconciliation=accounting.matchesStandardAllocation?
+     accounting.status:
      vault===real?'REAL_RESERVES_EQUAL_VAULT':
      vault>real?'VAULT_EXCEEDS_REPORTED_REAL_RESERVES_UNVERIFIED':
      'REPORTED_REAL_RESERVES_EXCEED_VAULT_UNVERIFIED';
