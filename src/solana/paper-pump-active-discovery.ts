@@ -8,7 +8,10 @@ const SOURCE=resolve('.paper-sessions/pump-verified-creations.jsonl');
 const OUTPUT=resolve('.paper-sessions/pump-active-candidates.jsonl');
 const PROGRAM='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const MINT=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const MAX_AGE_MS=30*60*1000;
+const MAX_AGE_MS=6*60*60*1000;
+const MIN_AGE_MS=15*60*1000;
+const PREFERRED_MIN_MS=30*60*1000;
+const PREFERRED_MAX_MS=3*60*60*1000;
 const MAX_CANDIDATES=30;
 const metric=(value:unknown):number|null=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
 
@@ -21,12 +24,18 @@ export function evaluateActivePair(pair:unknown,now:number){
  const created=metric(p?.pairCreatedAt);
  const reasons:string[]=[];
  if(p?.chainId!=='solana')reasons.push('NOT_SOLANA_PAIR');
- if(!created||created>now||now-created>MAX_AGE_MS)reasons.push('PAIR_NOT_RECENT');
+ if(!created||created>now||now-created>MAX_AGE_MS||now-created<MIN_AGE_MS)reasons.push('PAIR_AGE_OUTSIDE_15M_TO_6H');
  if(buys===null||sells===null||buys<5||sells<2)reasons.push('INSUFFICIENT_TWO_SIDED_TRADES');
  if(volume===null||volume<1000)reasons.push('INSUFFICIENT_FIVE_MINUTE_VOLUME');
- if(liquidity===null||liquidity<1000)reasons.push('INSUFFICIENT_LIQUIDITY');
+ if(liquidity===null||liquidity<10000)reasons.push('INSUFFICIENT_LIQUIDITY');
+ const hourlyVolume=metric(p?.volume?.h1);
+ const momentumProxy=hourlyVolume!==null&&hourlyVolume>0&&volume!==null
+  ? volume/(hourlyVolume/12):null;
+ if(momentumProxy===null||momentumProxy<=1)reasons.push('MOMENTUM_NOT_CONFIRMED');
  return {active:reasons.length===0,reasons,buys5m:buys,sells5m:sells,
-  volume5mUsd:volume,liquidityUsd:liquidity,pairAgeMs:created===null?null:now-created};
+  volume5mUsd:volume,liquidityUsd:liquidity,momentumProxy,
+  preferredAgeWindow:created!==null&&now-created>=PREFERRED_MIN_MS&&now-created<=PREFERRED_MAX_MS,
+  pairAgeMs:created===null?null:now-created};
 }
 
 function loadRecentVerified(now:number){
@@ -68,9 +77,10 @@ async function main(){
    const pairs=result.filter((p:any)=>p?.chainId==='solana'&&p?.baseToken?.address===candidate.mint);
    const evaluations=pairs.map(p=>({pair:p,evidence:evaluateActivePair(p,Date.now())}));
    const best=evaluations.sort((x,y)=>Number(y.evidence.active)-Number(x.evidence.active)||
+    Number(y.evidence.preferredAgeWindow)-Number(x.evidence.preferredAgeWindow)||
     (y.evidence.volume5mUsd??0)-(x.evidence.volume5mUsd??0))[0];
    const evidence=best?.evidence??{active:false,reasons:['NO_INDEXED_PAIR'],
-    buys5m:null,sells5m:null,volume5mUsd:null,liquidityUsd:null,pairAgeMs:null};
+    buys5m:null,sells5m:null,volume5mUsd:null,liquidityUsd:null,momentumProxy:null,preferredAgeWindow:false,pairAgeMs:null};
    const record={mint:candidate.mint,creationSignature:candidate.signature,
     creationVerifiedAt:candidate.checkedAt,checkedAt:new Date().toISOString(),
     source:'DEXSCREENER_ADVISORY',pairAddress:best?.pair?.pairAddress??null,
