@@ -36,7 +36,7 @@ try {
 const rugcheckApproved = new Set<string>();
 try {
   const latest = new Map<string, Record<string, unknown>>();
-  for (const line of readFileSync(rugcheckSource, 'utf8').split('\\n')) {
+  for (const line of readFileSync(rugcheckSource, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     try {
       const record: unknown = JSON.parse(line);
