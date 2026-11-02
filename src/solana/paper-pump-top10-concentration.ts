@@ -1,6 +1,6 @@
 /** Read-only top-10 non-curve token-account concentration screen.
- * Conservative: top ten non-curve accounts require paging beyond the RPC top 20
- * when necessary; never claim a pass if fewer than ten are available.
+ * Conservative: incomplete top-20 coverage fails closed; fewer than ten
+ * accounts are acceptable only when the returned list is complete.
  */
 import {PublicKey} from '@solana/web3.js';
 import {readFileSync} from 'node:fs';
@@ -11,28 +11,33 @@ const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
 const mintPattern=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 function loadCandidates():string[]{
- const verified=new Set<string>();
- for(const line of readFileSync('.paper-sessions/pump-verified-creations.jsonl','utf8').split('\\n')){
+ const verified=new Map<string,string>();
+ for(const line of readFileSync('.paper-sessions/pump-verified-creations.jsonl','utf8').split('\n')){
   if(!line.trim())continue;
-  try{const r=JSON.parse(line);
-   if(r.status==='VERIFIED_PUMP_FUN' &&
-      r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' &&
-      typeof r.mint==='string'&&mintPattern.test(r.mint)&&
-      typeof r.signature==='string'&&r.signature.length>0)verified.add(r.mint);
-  }catch{/* invalid creation is never eligible */}
+  try{
+   const r=JSON.parse(line);
+   if(typeof r.mint==='string') {
+    if(r.status==='VERIFIED_PUMP_FUN'&&
+       r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'&&
+       mintPattern.test(r.mint)&&typeof r.signature==='string'&&r.signature.length>0)
+      verified.set(r.mint,r.signature);
+    else verified.delete(r.mint);
+   }
+  }catch{/* malformed creation never qualifies */}
  }
  const latest=new Map<string,any>();
- for(const line of readFileSync('.paper-sessions/pump-market-screen.jsonl','utf8').split('\\n')){
+ for(const line of readFileSync('.paper-sessions/pump-rugcheck-full-review.jsonl','utf8').split('\n')){
   if(!line.trim())continue;
   try{const r=JSON.parse(line);
    if(typeof r.mint==='string')latest.set(r.mint,r);
-  }catch{/* invalid market evidence is never eligible */}
+  }catch{/* malformed review never qualifies */}
  }
+ const now=Date.now();
  return [...latest].filter(([mint,r])=>verified.has(mint)&&
-  r.origin==='VERIFIED_PUMP_FUN'&&r.source==='DEXSCREENER_BATCH'&&
-  r.marketScreenPassed===true&&Array.isArray(r.reasons)&&r.reasons.length===0&&
+  r.rugcheckStageStatus==='REVIEW_FOR_DEXSCREENER'&&
+  Array.isArray(r.rugcheckStageReasons)&&r.rugcheckStageReasons.length===0&&
   typeof r.checkedAt==='string'&&Number.isFinite(Date.parse(r.checkedAt))&&
-  Date.now()>=Date.parse(r.checkedAt)&&Date.now()-Date.parse(r.checkedAt)<=300000)
+  now>=Date.parse(r.checkedAt)&&now-Date.parse(r.checkedAt)<=300000)
   .slice(0,10).map(([mint])=>mint);
 }
 const mints=loadCandidates();
@@ -48,7 +53,7 @@ async function rpc(method:string,params:unknown[]):Promise<any>{
  return data.result;
 }
 async function main():Promise<void>{
- if(!mints.length){console.log(JSON.stringify({mode:'READ_ONLY',screened:0,rpcRequests:0,reason:'NO_FRESH_VERIFIED_MARKET_CANDIDATES',approvedForTrading:0}));return;}
+ if(!mints.length){console.log(JSON.stringify({mode:'READ_ONLY',screened:0,rpcRequests:0,reason:'NO_FRESH_VERIFIED_RUGCHECK_CANDIDATES',approvedForTrading:0}));return;}
  for(const mint of mints){
   const curve=PublicKey.findProgramAddressSync(
    [Buffer.from('bonding-curve'),new PublicKey(mint).toBuffer()],pump)[0].toBase58();
@@ -153,7 +158,7 @@ async function main():Promise<void>{
    mintSupplyRaw,observedCurveBalanceRaw,largestAccountsReturned,topTenNonCurveSharePercent:percent,
    topTenShareOfObservedOutsideCurveSupplyPercent:outsideCurvePercent,
    observedCurveSharePercent:curveSharePercent,outsideCurveStatus,
-   outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
+   outsideCurveMetric:'ADVISORY_ONLY; curve custody not independently verified',
    nonCurveAccountsCounted:counted,excludedCurveAccounts:curveAccounts,
    denominator:'TOTAL_MINT_SUPPLY',thresholdPercent:40,
    mintAuthorityActive:mintAuthority!==null && mintAuthority!==undefined,
