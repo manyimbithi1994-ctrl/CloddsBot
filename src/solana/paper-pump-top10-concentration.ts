@@ -4,6 +4,7 @@
  */
 import {PublicKey} from '@solana/web3.js';
 import {evaluateConcentrationPolicy} from './paper-concentration-policy';
+import {parseMintAccountEvidence} from './paper-quicknode-mint-evidence';
 const rpcUrl=process.env.CLODDS_RESEARCH_RPC_URL;
 if(!rpcUrl||!rpcUrl.startsWith('https://'))throw Error('HTTPS research RPC required');
 const mints=['3msFLe2RXjfC6wHkkGjvXFFjfMf7Fvmc42HeaEBmpump','Hq76LjXyS9eJeTXHqkMEjDAdMuzQ41K14Lx35yKQ5Y1b'];
@@ -26,11 +27,19 @@ async function main():Promise<void>{
   let counted=0,curveAccounts=0;
   let outsideCurvePercent:number|null=null,curveSharePercent:number|null=null;
   let outsideCurveStatus='UNKNOWN';
+  let mintAuthority:string|null|undefined=undefined;
+  let freezeAuthority:string|null|undefined=undefined;
+  let mintEvidenceReasons:string[]=['MINT_ACCOUNT_NOT_FETCHED'];
   try{
    const [mintAccount,largest]=await Promise.all([
     rpc('getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'finalized'}]),
     rpc('getTokenLargestAccounts',[mint,{commitment:'finalized'}])
    ]);
+   const mintEvidence=parseMintAccountEvidence(mint,mintAccount);
+   mintAuthority=mintEvidence.mintAuthority;
+   freezeAuthority=mintEvidence.freezeAuthority;
+   mintEvidenceReasons=mintEvidence.reasons;
+   if(mintEvidence.reasons.length)throw Error('MINT_ACCOUNT_UNVERIFIED');
    const supplyRaw=mintAccount.value?.data?.parsed?.info?.supply;
    if(typeof supplyRaw!=='string'||!/^\d+$/.test(supplyRaw)||BigInt(supplyRaw)===0n)
     throw Error('INVALID_MINT_SUPPLY');
@@ -99,7 +108,9 @@ async function main():Promise<void>{
    outsideCurveMetric:'ADVISORY_ONLY; subtracts observed verified curve token-account balances',
    nonCurveAccountsCounted:counted,excludedCurveAccounts:curveAccounts,
    denominator:'TOTAL_MINT_SUPPLY',thresholdPercent:40,
-   distinctBeneficialOwnersVerified:false,token2022ExtensionsVerified:false,
+   mintAuthorityActive:mintAuthority!==null && mintAuthority!==undefined,
+   freezeAuthorityActive:freezeAuthority!==null && freezeAuthority!==undefined,
+   mintEvidenceReasons,distinctBeneficialOwnersVerified:false,token2022ExtensionsVerified:false,
    automatedTradingEligible:false}));
  }
  console.log(JSON.stringify({mode:'READ_ONLY',rpcRequests,approvedForTrading:0}));
