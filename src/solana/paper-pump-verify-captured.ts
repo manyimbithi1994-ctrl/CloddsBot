@@ -28,12 +28,13 @@ for (const line of input.split('\n')) {
       records.push({ signature: item.signature, mint: item.mint });
   } catch { /* ignore malformed journal lines */ }
 }
+async function main(): Promise<void> {
 let checked = 0;
 let verified = 0;
 for (const item of records.slice(0, limit)) {
   checked++;
   try {
-    const response = await fetch(rpc, {
+    const response = await fetch(rpc!, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: checked, method: 'getTransaction',
         params: [item.signature, { encoding: 'jsonParsed', commitment: 'finalized',
@@ -64,3 +65,9 @@ for (const item of records.slice(0, limit)) {
   await new Promise(r => setTimeout(r, 1200));
 }
 console.log(JSON.stringify({ mode: 'RESEARCH_ONLY', checked, verified, limit, output: target }));
+
+}
+void main().catch((error: unknown) => {
+  console.error('Verification failed:', error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
