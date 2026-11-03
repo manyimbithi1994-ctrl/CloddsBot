@@ -10,6 +10,8 @@ const input=resolve('.paper-sessions/pump-verified-creations.jsonl');
 const output=resolve('.paper-sessions/pump-rugcheck-full-review.jsonl');
 const MAX_CANDIDATES=10;
 const MAX_ATTEMPTS=3;
+const REJECT_COOLDOWN_MS=30*60*1000;
+const PASS_REFRESH_MS=4*60*1000;
 const mintPattern=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 type RecordValue=Record<string,unknown>;
 const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
@@ -52,13 +54,25 @@ async function main():Promise<void>{
    if(object(item)&&typeof item.mint==='string'&&mintPattern.test(item.mint))latest.set(item.mint,item);
   }catch{/* malformed candidate cannot become eligible */}
  }
+ const lastReview=new Map<string,RecordValue>();
+ if(existsSync(output))for(const line of readFileSync(output,'utf8').split('\n')){
+  if(!line.trim())continue;
+  try{const r:unknown=JSON.parse(line);if(object(r)&&typeof r.mint==='string')lastReview.set(r.mint,r);}catch{/* ignore malformed */}
+ }
  const candidates=[...latest.values()].filter(r=>r.status==='VERIFIED_PUMP_FUN' &&
   r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' &&
   typeof r.signature==='string' && r.signature.length>0 &&
   typeof r.createdAt==='string' && Number.isFinite(Date.parse(r.createdAt)) &&
   Date.now()-Date.parse(r.createdAt)>=0 && Date.now()-Date.parse(r.createdAt)<=6*60*60*1000)
   .sort((a,b)=>Date.parse(b.createdAt as string)-Date.parse(a.createdAt as string))
-  .slice(0,MAX_CANDIDATES);
+  .filter(r=>{
+   const old=lastReview.get(r.mint as string);
+   if(!old||typeof old.checkedAt!=='string')return true;
+   const elapsed=Date.now()-Date.parse(old.checkedAt);
+   if(!Number.isFinite(elapsed)||elapsed<0)return true;
+   const passing=old.status==='RUGCHECK_RESEARCH_PASS'&&old.rugcheckStageStatus==='REVIEW_FOR_DEXSCREENER';
+   return elapsed>=(passing?PASS_REFRESH_MS:REJECT_COOLDOWN_MS);
+  }).slice(0,MAX_CANDIDATES);
  mkdirSync(dirname(output),{recursive:true});
  for(const candidate of candidates){
   const mint=candidate.mint as string;
