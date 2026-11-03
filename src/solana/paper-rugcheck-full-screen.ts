@@ -71,7 +71,8 @@ async function main():Promise<void>{
    const elapsed=Date.now()-Date.parse(old.checkedAt);
    if(!Number.isFinite(elapsed)||elapsed<0)return true;
    const passing=old.status==='RUGCHECK_RESEARCH_PASS'&&old.rugcheckStageStatus==='REVIEW_FOR_DEXSCREENER';
-   return elapsed>=(passing?PASS_REFRESH_MS:REJECT_COOLDOWN_MS);
+   const confirmedRisk=old.rugcheckStageStatus==='REJECT_RISK';
+   return elapsed>=(passing?PASS_REFRESH_MS:confirmedRisk?REJECT_COOLDOWN_MS:5*60*1000);
   }).slice(0,MAX_CANDIDATES);
  mkdirSync(dirname(output),{recursive:true});
  for(const candidate of candidates){
