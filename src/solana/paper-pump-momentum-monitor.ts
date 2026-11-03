@@ -44,7 +44,7 @@ async function main(){
   if(child.status!==0)throw Error('DISCOVERY_FAILED_'+String(child.status));
   const after=readObservations();
   const latest=new Map<string,Observation>();
-  for(const r of after)latest.set(r.mint,r);
+  for(const r of after.slice(before.length))latest.set(r.mint,r);
   let evaluated=0,observed=0;
   for(const current of latest.values()){
    const previous=[...before].reverse().find(r=>r.mint===current.mint&&
