@@ -8,7 +8,8 @@ const steps=[
  ['paper-pump-event-collector.ts',[],150000],
  ['paper-pump-verify-captured.ts',['20'],90000],
  ['paper-rugcheck-full-screen.ts',[],90000],
- ['paper-pump-active-discovery.ts',[],60000]
+ ['paper-pump-active-discovery.ts',[],60000],
+ ['paper-pump-watchlist.ts',[],15000]
 ] as const;
 const wait=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 async function main():Promise<void>{
