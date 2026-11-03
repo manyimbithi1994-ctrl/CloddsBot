@@ -64,7 +64,6 @@ async function main():Promise<void>{
   typeof r.signature==='string' && r.signature.length>0 &&
   typeof r.createdAt==='string' && Number.isFinite(Date.parse(r.createdAt)) &&
   Date.now()-Date.parse(r.createdAt)>=0 && Date.now()-Date.parse(r.createdAt)<=6*60*60*1000)
-  .sort((a,b)=>Date.parse(b.createdAt as string)-Date.parse(a.createdAt as string))
   .filter(r=>{
    const old=lastReview.get(r.mint as string);
    if(!old||typeof old.checkedAt!=='string')return true;
@@ -73,6 +72,15 @@ async function main():Promise<void>{
    const passing=old.status==='RUGCHECK_RESEARCH_PASS'&&old.rugcheckStageStatus==='REVIEW_FOR_DEXSCREENER';
    const confirmedRisk=old.rugcheckStageStatus==='REJECT_RISK';
    return elapsed>=(passing?PASS_REFRESH_MS:confirmedRisk?REJECT_COOLDOWN_MS:5*60*1000);
+  }).sort((a,b)=>{
+   // Review never-screened coins first, oldest first: avoids starving maturing tokens.
+   const aTime=lastReview.get(a.mint as string)?.checkedAt;
+   const bTime=lastReview.get(b.mint as string)?.checkedAt;
+   const aReviewed=typeof aTime==='string'&&Number.isFinite(Date.parse(aTime));
+   const bReviewed=typeof bTime==='string'&&Number.isFinite(Date.parse(bTime));
+   if(aReviewed!==bReviewed)return aReviewed?1:-1;
+   if(aReviewed&&bReviewed)return Date.parse(aTime as string)-Date.parse(bTime as string);
+   return Date.parse(a.createdAt as string)-Date.parse(b.createdAt as string);
   }).slice(0,MAX_CANDIDATES);
  mkdirSync(dirname(output),{recursive:true});
  for(const candidate of candidates){
