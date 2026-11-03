@@ -54,7 +54,11 @@ async function main():Promise<void>{
  }
  const candidates=[...latest.values()].filter(r=>r.status==='VERIFIED_PUMP_FUN' &&
   r.programId==='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' &&
-  typeof r.signature==='string' && r.signature.length>0).slice(0,MAX_CANDIDATES);
+  typeof r.signature==='string' && r.signature.length>0 &&
+  typeof r.createdAt==='string' && Number.isFinite(Date.parse(r.createdAt)) &&
+  Date.now()-Date.parse(r.createdAt)>=0 && Date.now()-Date.parse(r.createdAt)<=6*60*60*1000)
+  .sort((a,b)=>Date.parse(b.createdAt as string)-Date.parse(a.createdAt as string))
+  .slice(0,MAX_CANDIDATES);
  mkdirSync(dirname(output),{recursive:true});
  for(const candidate of candidates){
   const mint=candidate.mint as string;
