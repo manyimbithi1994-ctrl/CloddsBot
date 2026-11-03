@@ -13,6 +13,20 @@ const MIN_AGE_MS=15*60*1000;
 const PREFERRED_MIN_MS=30*60*1000;
 const PREFERRED_MAX_MS=3*60*60*1000;
 const MAX_CANDIDATES=30;
+const RUGCHECK=resolve('.paper-sessions/pump-rugcheck-full-review.jsonl');
+function recentRugcheckPasses(now:number):Set<string>{
+ const latest=new Map<string,any>();
+ try{for(const line of readFileSync(RUGCHECK,'utf8').split('\n')){
+  if(!line.trim())continue;
+  try{const r=JSON.parse(line);if(typeof r.mint==='string')latest.set(r.mint,r);}catch{/* reject malformed */}
+ }}catch{return new Set();}
+ return new Set([...latest].filter(([,r])=>r.rugcheckStageStatus==='REVIEW_FOR_DEXSCREENER'&&
+  Array.isArray(r.rugcheckStageReasons)&&r.rugcheckStageReasons.length===0&&
+  r.status==='RUGCHECK_RESEARCH_PASS'&&Array.isArray(r.reasons)&&r.reasons.length===0&&
+  typeof r.checkedAt==='string'&&Number.isFinite(Date.parse(r.checkedAt))&&
+  now-Date.parse(r.checkedAt)>=0&&now-Date.parse(r.checkedAt)<=5*60*1000)
+  .map(([mint])=>mint));
+}
 const metric=(value:unknown):number|null=>typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
 
 export function evaluateActivePair(pair:unknown,now:number){
@@ -58,9 +72,10 @@ function loadRecentVerified(now:number){
 
 async function main(){
  const now=Date.now();
- const candidates=loadRecentVerified(now);
+ const allowed=recentRugcheckPasses(now);
+ const candidates=loadRecentVerified(now).filter(r=>allowed.has(r.mint));
  if(!candidates.length){
-  console.log(JSON.stringify({mode:'READ_ONLY',screened:0,reason:'NO_RECENT_VERIFIED_CREATIONS',approvedForTrading:0}));
+  console.log(JSON.stringify({mode:'READ_ONLY',screened:0,reason:'NO_RECENT_RUGCHECK_APPROVED_VERIFIED_CREATIONS',approvedForTrading:0}));
   return;
  }
  mkdirSync(dirname(OUTPUT),{recursive:true});
